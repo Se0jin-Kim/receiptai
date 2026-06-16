@@ -213,17 +213,28 @@
         .reanalyze-btn:disabled { opacity: 0.38; cursor: not-allowed; }
 
         /* ── 재분석 비교 모달 ── */
+        #reanalyze-modal .modal-box {
+            background: #ffffff;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.22);
+        }
+        html.carbon #reanalyze-modal .modal-box {
+            background: #2a2a3e;
+        }
         .compare-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 1rem; }
         .compare-table th, .compare-table td {
-            padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); text-align: left;
+            padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border-color, #e0e0e0); text-align: left;
         }
         .compare-table th {
             font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);
-            background: var(--bg-secondary);
+            background: #f0f7ff;
         }
+        html.carbon .compare-table th { background: #3a3a5e; color: #f0f0f0; }
+        .compare-table td { background: #ffffff; color: #1a1a1a; }
+        html.carbon .compare-table td { background: #1e1e2e; color: #f0f0f0; }
         .compare-table td:first-child { font-weight: 500; color: var(--text-secondary); width: 4.5rem; }
         .compare-table .new-val { color: var(--accent); font-weight: 600; }
-        .compare-table tr.changed { background: rgba(99,102,241,0.04); }
+        .compare-table tr.changed td { background: rgba(99,102,241,0.1); }
+        html.carbon .compare-table tr.changed td { background: rgba(99,102,241,0.2); }
 
         /* ── 토스트 ── */
         #toast {
