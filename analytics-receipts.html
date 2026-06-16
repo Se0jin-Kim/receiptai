@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>통계 - ReceiptAI</title>
+    <script>if(localStorage.getItem('daynight-theme')==='carbon'){document.documentElement.classList.add('carbon');}</script>
+    <script src="https://code.jquery.com/jquery-latest.min.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="./config.js"></script>
+    <link rel="stylesheet" href="templatemo-daynight-style.css">
+    <style>
+        /* ── 로딩 ── */
+        .loading-wrap { text-align:center; padding:5rem 1rem; color:var(--text-secondary); }
+        .spinner {
+            width:36px; height:36px;
+            border:3px solid var(--border); border-top-color:var(--accent);
+            border-radius:50%; animation:spin 0.75s linear infinite; margin:0 auto 1rem;
+        }
+        @keyframes spin { to { transform:rotate(360deg); } }
+
+        /* ── 빈 상태 / 에러 ── */
+        .empty-state { text-align:center; padding:4rem 1rem; color:var(--text-secondary); }
+        .empty-state svg { width:52px; height:52px; margin-bottom:1rem; opacity:0.35; }
+        .empty-state p { font-size:0.95rem; }
+        .error-banner {
+            display:none; padding:0.75rem 1rem; border-radius:8px;
+            background:rgba(239,68,68,0.08); color:#ef4444;
+            font-size:0.875rem; margin-bottom:1.25rem;
+        }
+
+        /* ── 요약 카드 ── */
+        .summary-grid {
+            display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+            gap:1rem; margin-bottom:1.5rem;
+        }
+        .summary-card {
+            background:var(--bg-card,var(--card-bg)); border:1px solid var(--border);
+            border-radius:12px; padding:1.1rem 1.25rem;
+        }
+        .s-label { font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.35rem; }
+        .s-value { font-size:1.25rem; font-weight:700; color:var(--text-primary); }
+        .s-value.accent { color:var(--accent); }
+        .s-sub { font-size:0.75rem; color:var(--text-secondary); margin-top:0.2rem; }
+
+        /* ── 2열 행 ── */
+        .charts-row { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-bottom:1.5rem; }
+        @media (max-width:768px) { .charts-row { grid-template-columns:1fr; } }
+
+        /* ── 도넛 차트 ── */
+        .donut-wrap { display:flex; gap:1.5rem; align-items:center; flex-wrap:wrap; }
+        .donut-svg-wrap { flex-shrink:0; }
+        .donut-legend { display:flex; flex-direction:column; gap:0.55rem; flex:1; min-width:130px; }
+        .legend-item { display:flex; align-items:center; gap:0.5rem; }
+        .legend-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+        .legend-name { font-size:0.8rem; color:var(--text-secondary); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .legend-amt { font-size:0.8rem; font-weight:600; color:var(--text-primary); white-space:nowrap; }
+        .legend-pct { font-size:0.75rem; color:var(--text-secondary); white-space:nowrap; }
+
+        /* ── 막대 차트 ── */
+        .chart-toggle { display:flex; gap:0.5rem; }
+        .toggle-btn {
+            padding:0.3rem 0.85rem; font-size:0.8rem;
+            border:1px solid var(--border); border-radius:8px;
+            background:var(--bg-secondary); color:var(--text-secondary);
+            cursor:pointer; transition:all 0.15s;
+        }
+        .toggle-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+        .bar-chart-wrap { overflow-x:auto; padding-bottom:0.25rem; }
+        .bar-chart { display:flex; align-items:flex-end; gap:0.75rem; padding:0.5rem 0 0; min-height:195px; }
+        .bar-group { display:flex; flex-direction:column; align-items:center; gap:0.3rem; min-width:44px; }
+        .bar { background:var(--accent); border-radius:6px 6px 0 0; width:36px; min-height:4px; opacity:0.85; transition:opacity 0.15s; }
+        .bar:hover { opacity:1; }
+        .bar-val { font-size:0.68rem; color:var(--text-secondary); text-align:center; line-height:1.2; }
+        .bar-lbl { font-size:0.7rem; color:var(--text-secondary); text-align:center; white-space:nowrap; }
+
+        /* ── 예산 바 ── */
+        .budget-input-row { display:flex; gap:0.5rem; align-items:center; margin-bottom:1.25rem; }
+        .budget-input {
+            flex:1; max-width:180px;
+            padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:8px;
+            background:var(--bg-secondary); color:var(--text-primary);
+            font-size:0.875rem; font-family:inherit; outline:none; transition:border-color 0.2s;
+        }
+        .budget-input:focus { border-color:var(--accent); }
+        .progress-label-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem; font-size:0.82rem; }
+        .progress-outer { height:14px; background:var(--border); border-radius:99px; overflow:hidden; margin-bottom:0.5rem; }
+        .progress-inner { height:100%; border-radius:99px; transition:width 0.6s ease, background 0.3s; }
+        .budget-note { font-size:0.78rem; color:var(--text-secondary); }
+
+        .section-gap { margin-bottom:1.5rem; }
+    </style>
+</head>
+<body>
+
+    <!-- ===== MVT Script Block 1: 헬퍼 함수 ===== -->
+    <script>
+        var mobile = 'desktop';
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+            mobile = 'mobile';
+        }
+
+        var queryString = location.search;
+        const urlParams = new URLSearchParams(queryString);
+        const utm = urlParams.get("utm");
+
+        function padValue(value) { return (value < 10) ? "0" + value : value; }
+
+        function getTimeStamp() {
+            const date = new Date();
+            const year = date.getFullYear(), month = date.getMonth() + 1, day = date.getDate();
+            const hours = date.getHours(), minutes = date.getMinutes(), seconds = date.getSeconds();
+            return `${padValue(year)}-${padValue(month)}-${padValue(day)} ${padValue(hours)}:${padValue(minutes)}:${padValue(seconds)}`;
+        }
+
+        function getCookieValue(name) {
+            const value = "; " + document.cookie;
+            const parts = value.split("; " + name + "=");
+            if (parts.length === 2) return parts.pop().split(";").shift();
+        }
+
+        function setCookieValue(name, value, days) {
+            let expires = "";
+            if (days) {
+                const date = new Date();
+                date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+                expires = "; expires=" + date.toUTCString();
+            }
+            document.cookie = name + "=" + (value || "") + expires + "; path=/";
+        }
+
+        function getUVfromCookie() {
+            const hash = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const existingHash = getCookieValue("user");
+            if (!existingHash) { setCookieValue("user", hash, 180); return hash; }
+            return existingHash;
+        }
+    </script>
+
+    <!-- ===== MVT Script Block 2: IP 수집 (JSONP) ===== -->
+    <script type="application/javascript">
+        var ip = "null";
+        function getIP(json) {
+            console.log(json);
+            try { ip = json.ip; } catch (e) { ip = 'unknown'; }
+        }
+    </script>
+    <script type="application/javascript" src="https://jsonip.com?format=jsonp&callback=getIP"></script>
+
+    <!-- Mobile Menu Overlay -->
+    <div class="mobile-menu-overlay"></div>
+
+    <!-- Mobile Menu -->
+    <div class="mobile-menu">
+        <div class="mobile-menu-header">
+            <a href="index.html" class="logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+                </div>
+                ReceiptAI
+            </a>
+            <button class="mobile-menu-close" onclick="closeMobileMenu()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <nav class="mobile-menu-nav">
+            <a href="index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                홈
+            </a>
+            <a href="receipts.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+                Receipts
+            </a>
+            <a href="analytics-receipts.html" class="active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                Analytics
+            </a>
+            <a href="report.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                리포트
+            </a>
+            <a href="budget.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><polyline points="2 10 22 10"/><circle cx="17" cy="15" r="1" fill="currentColor" stroke="none"/></svg>
+                예산 관리
+            </a>
+            <a href="settings.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                Settings
+            </a>
+        </nav>
+        <div class="mobile-menu-footer">
+            <a href="login.html" class="mobile-logout-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Logout
+            </a>
+            <div class="theme-toggle">
+                <button class="theme-btn theme-btn-snow active" onclick="setTheme('snow')" title="Snow Edition">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                </button>
+                <button class="theme-btn theme-btn-carbon" onclick="setTheme('carbon')" title="Carbon Edition">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Top Navigation -->
+        <nav class="top-nav">
+            <div class="nav-container">
+                <div class="nav-left">
+                    <a href="index.html" class="logo">
+                        <div class="logo-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+                        </div>
+                        ReceiptAI
+                    </a>
+                    <div class="nav-menu">
+                        <div class="nav-item"><a href="index.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>홈</a></div>
+                        <div class="nav-item"><a href="receipts.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>Receipts</a></div>
+                        <div class="nav-item"><a href="analytics-receipts.html" class="nav-link active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Analytics</a></div>
+                        <div class="nav-item"><a href="report.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>리포트</a></div>
+                        <div class="nav-item"><a href="budget.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><polyline points="2 10 22 10"/><circle cx="17" cy="15" r="1" fill="currentColor" stroke="none"/></svg>예산 관리</a></div>
+                        <div class="nav-item"><a href="settings.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a></div>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="theme-toggle">
+                        <button class="theme-btn theme-btn-snow active" onclick="setTheme('snow')" title="Snow Edition"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button>
+                        <button class="theme-btn theme-btn-carbon" onclick="setTheme('carbon')" title="Carbon Edition"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+                    </div>
+                    <button class="user-menu"><div class="user-avatar">A</div><span class="user-name">Alex</span></button>
+                    <a href="login.html" class="btn-logout" title="Logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
+                    <button class="mobile-menu-btn" onclick="toggleMobileMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+
+            <!-- Page Header -->
+            <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem;">
+                <div>
+                    <h1 class="greeting">지출 통계</h1>
+                    <p class="greeting-sub">Google Sheets 영수증 데이터를 시각화합니다</p>
+                </div>
+                <button class="btn btn-secondary" onclick="loadData()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    새로고침
+                </button>
+            </div>
+
+            <!-- Error Banner -->
+            <div id="error-banner" class="error-banner">
+                데이터를 불러오는 데 실패했습니다. 네트워크 상태를 확인하거나 잠시 후 다시 시도해주세요.
+            </div>
+
+            <!-- Loading -->
+            <div id="loading-wrap" class="loading-wrap">
+                <div class="spinner"></div>
+                <p>데이터를 불러오는 중...</p>
+            </div>
+
+            <!-- Analytics Content -->
+            <div id="analytics-wrap" style="display:none;">
+
+                <!-- Empty State -->
+                <div id="empty-state" class="empty-state" style="display:none;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                        <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+                    </svg>
+                    <p>아직 등록된 회계 데이터가 없습니다</p>
+                    <p style="font-size:0.82rem; margin-top:0.5rem;">
+                        <a href="receipts.html" style="color:var(--accent);">영수증 등록 페이지</a>에서 첫 데이터를 입력해보세요.
+                    </p>
+                </div>
+
+                <!-- Chart Content -->
+                <div id="chart-content" style="display:none;">
+
+                    <!-- ① 전체 요약 카드 -->
+                    <div class="summary-grid" id="summary-grid"></div>
+
+                    <!-- ② 도넛 차트 + ③ 예산 대비 사용률 -->
+                    <div class="charts-row">
+
+                        <!-- 카테고리별 도넛 -->
+                        <div class="card">
+                            <div class="card-header">
+                                <div>
+                                    <h3 class="card-title">카테고리별 지출 비율</h3>
+                                    <p class="card-subtitle">금액 기준 구성 비율</p>
+                                </div>
+                            </div>
+                            <div class="donut-wrap" id="donut-wrap"></div>
+                        </div>
+
+                        <!-- 예산 대비 사용률 -->
+                        <div class="card">
+                            <div class="card-header">
+                                <div>
+                                    <h3 class="card-title">전체 예산 대비 사용률</h3>
+                                    <p class="card-subtitle">예산을 설정하면 사용률을 확인할 수 있습니다</p>
+                                </div>
+                            </div>
+                            <div class="budget-input-row">
+                                <input type="text" id="budget-input" class="budget-input"
+                                    placeholder="예산 입력 (원)" inputmode="numeric"
+                                    onkeydown="if(event.key==='Enter') applyBudget()"
+                                    onfocus="this.style.borderColor='var(--accent)'"
+                                    onblur="this.style.borderColor='var(--border)'">
+                                <button class="btn btn-secondary" onclick="applyBudget()" style="font-size:0.85rem; padding:0.48rem 0.9rem;">적용</button>
+                            </div>
+                            <div id="budget-display"></div>
+                        </div>
+                    </div>
+
+                    <!-- ⑤ 작성자별 등록 현황 -->
+                    <div class="card section-gap" id="author-section" style="display:none;">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">작성자별 등록 현황</h3>
+                                <p class="card-subtitle">작성자 기준 건수 및 총액</p>
+                            </div>
+                        </div>
+                        <div id="author-list"></div>
+                    </div>
+
+                    <!-- ④ 월별/주별 막대 차트 -->
+                    <div class="card section-gap">
+                        <div class="card-header" style="align-items:flex-start;">
+                            <div>
+                                <h3 class="card-title">지출 추이</h3>
+                                <p class="card-subtitle" id="bar-subtitle">월별 합계</p>
+                            </div>
+                            <div class="chart-toggle">
+                                <button class="toggle-btn active" id="btn-monthly" onclick="switchBarMode('monthly')">월별</button>
+                                <button class="toggle-btn" id="btn-weekly" onclick="switchBarMode('weekly')">주별</button>
+                            </div>
+                        </div>
+                        <div class="bar-chart-wrap">
+                            <div class="bar-chart" id="bar-chart"></div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </main>
+
+        <footer class="footer">
+            <p>&copy; 2026 ReceiptAI - OCR 기반 스마트 회계 관리</p>
+        </footer>
+    </div>
+
+    <script src="templatemo-daynight-script.js"></script>
+
+    <script>
+    /* ================================================================
+       Analytics – Google Sheets receipts 데이터 시각화
+    ================================================================ */
+
+    if (typeof APPS_SCRIPT_URL === 'undefined') {
+        console.error('config.js가 없습니다. config.example.js를 참고하여 config.js를 생성해주세요.');
+    }
+    const BUDGET_KEY = 'totalBudget';
+
+    const CHART_COLORS = ['#6366F1','#10B981','#F59E0B','#A855F7','#6B7280','#EF4444','#14B8A6','#F97316'];
+
+    let allReceipts = [];
+    let barMode = 'monthly';
+
+    /* ── 유틸 ── */
+    function fmt(n) { return Number(n).toLocaleString('ko-KR') + '원'; }
+    function fmtShort(n) {
+        n = Number(n) || 0;
+        if (n >= 100000000) return (n / 100000000).toFixed(1) + '억';
+        if (n >= 10000) return Math.round(n / 10000) + '만';
+        return n.toLocaleString('ko-KR');
+    }
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function getWeekKey(dateStr) {
+        const d = new Date(String(dateStr).trim().substring(0, 10) + 'T00:00:00');
+        if (isNaN(d)) return null;
+        const jan1 = new Date(d.getFullYear(), 0, 1);
+        const week = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+        return `${d.getFullYear()}-W${String(week).padStart(2, '0')}`;
+    }
+
+    /* ── 데이터 로드 ── */
+    function loadData() {
+        const _userUrl = localStorage.getItem('userAppsScriptUrl');
+        const _sheetsUrl = (_userUrl && _userUrl.trim()) ? _userUrl.trim() : APPS_SCRIPT_URL;
+
+        document.getElementById('loading-wrap').style.display = 'block';
+        document.getElementById('analytics-wrap').style.display = 'none';
+        document.getElementById('error-banner').style.display = 'none';
+
+        $.ajax({
+            url: _sheetsUrl + '?action=read&table=receipts',
+            dataType: 'jsonp',
+            timeout: 15000,
+            success: function(response) {
+                const raw = (response && Array.isArray(response.data) ? response.data
+                            : Array.isArray(response) ? response : []).filter(r => r != null);
+                const local = (() => { try { return JSON.parse(localStorage.getItem('receipts')) || []; } catch(e) { return []; } })();
+                allReceipts = getMergedReceipts(raw, local);
+                renderAll();
+            },
+            error: function() {
+                document.getElementById('loading-wrap').style.display = 'none';
+                document.getElementById('analytics-wrap').style.display = 'block';
+                const errEl = document.getElementById('error-banner');
+                try {
+                    const stored = JSON.parse(localStorage.getItem('receipts')) || [];
+                    allReceipts = stored;
+                    errEl.textContent = stored.length
+                        ? `Sheets 연결 실패. 로컬 저장 데이터 ${stored.length}건으로 표시합니다.`
+                        : '데이터를 불러오는 데 실패했습니다. 네트워크 상태를 확인하거나 잠시 후 다시 시도해주세요.';
+                } catch(e) {
+                    allReceipts = [];
+                    errEl.textContent = '데이터를 불러오는 데 실패했습니다.';
+                }
+                errEl.style.display = 'block';
+                renderAll();
+            }
+        });
+    }
+
+    function renderAll() {
+        document.getElementById('loading-wrap').style.display = 'none';
+        document.getElementById('analytics-wrap').style.display = 'block';
+
+        if (!allReceipts.length) {
+            document.getElementById('empty-state').style.display = 'block';
+            document.getElementById('chart-content').style.display = 'none';
+            return;
+        }
+        document.getElementById('empty-state').style.display = 'none';
+        document.getElementById('chart-content').style.display = 'block';
+
+        renderSummary();
+        renderDonut();
+        renderBudget();
+        renderAuthorChart();
+        renderBarChart();
+    }
+
+    /* ── ⑤ 작성자별 등록 현황 ── */
+    function renderAuthorChart() {
+        const data = {};
+        allReceipts.forEach(r => {
+            const a = (r.author || '').trim() || '(미입력)';
+            if (!data[a]) data[a] = { count: 0, total: 0 };
+            data[a].count++;
+            data[a].total += Number(r.amount) || 0;
+        });
+
+        const entries = Object.entries(data).sort((a, b) => b[1].total - a[1].total);
+        const section = document.getElementById('author-section');
+        if (!entries.length) { section.style.display = 'none'; return; }
+        section.style.display = 'block';
+
+        const maxTotal = Math.max(...entries.map(([, d]) => d.total));
+        document.getElementById('author-list').innerHTML = entries.map(([name, d]) => {
+            const pct = maxTotal > 0 ? Math.round((d.total / maxTotal) * 100) : 0;
+            return `
+            <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+                <div style="width:72px;font-size:0.82rem;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(name)}">${escHtml(name)}</div>
+                <div style="flex:1;height:10px;background:var(--border);border-radius:99px;overflow:hidden;">
+                    <div style="width:${pct}%;height:100%;background:var(--accent);border-radius:99px;transition:width 0.4s;"></div>
+                </div>
+                <div style="font-size:0.78rem;color:var(--text-secondary);white-space:nowrap;">${d.count}건</div>
+                <div style="font-size:0.82rem;font-weight:600;color:var(--text-primary);white-space:nowrap;min-width:70px;text-align:right;">${fmt(d.total)}</div>
+            </div>`;
+        }).join('');
+    }
+
+    /* ── ① 전체 요약 카드 ── */
+    function renderSummary() {
+        const total = allReceipts.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+        const count = allReceipts.length;
+        const avg = count ? Math.round(total / count) : 0;
+
+        const catTotals = {};
+        allReceipts.forEach(r => {
+            const c = r.category || '기타';
+            catTotals[c] = (catTotals[c] || 0) + (Number(r.amount) || 0);
+        });
+        const top = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0];
+
+        document.getElementById('summary-grid').innerHTML = `
+            <div class="summary-card">
+                <div class="s-label">총 지출액</div>
+                <div class="s-value accent">${fmt(total)}</div>
+            </div>
+            <div class="summary-card">
+                <div class="s-label">총 건수</div>
+                <div class="s-value">${count}건</div>
+            </div>
+            <div class="summary-card">
+                <div class="s-label">평균 지출액</div>
+                <div class="s-value">${fmt(avg)}</div>
+            </div>
+            <div class="summary-card">
+                <div class="s-label">최다 지출 카테고리</div>
+                <div class="s-value" style="font-size:1.05rem;">${top ? escHtml(top[0]) : '-'}</div>
+                ${top ? `<div class="s-sub">${fmt(top[1])}</div>` : ''}
+            </div>`;
+    }
+
+    /* ── ② 카테고리별 도넛 차트 ── */
+    function renderDonut() {
+        const catTotals = {};
+        let grandTotal = 0;
+        allReceipts.forEach(r => {
+            const c = r.category || '기타';
+            const a = Number(r.amount) || 0;
+            catTotals[c] = (catTotals[c] || 0) + a;
+            grandTotal += a;
+        });
+        if (!grandTotal) return;
+
+        const segments = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
+        const R = 70, CX = 100, CY = 100;
+        const CIRC = 2 * Math.PI * R;
+
+        let svgCircles = '';
+        let cumulativeDash = 0;
+
+        segments.forEach(([cat, sum], i) => {
+            const dash = (sum / grandTotal) * CIRC;
+            const color = CHART_COLORS[i % CHART_COLORS.length];
+            svgCircles += `<circle cx="${CX}" cy="${CY}" r="${R}" fill="none"
+                stroke="${color}" stroke-width="28"
+                stroke-dasharray="${dash.toFixed(2)} ${(CIRC - dash).toFixed(2)}"
+                stroke-dashoffset="${(CIRC - cumulativeDash).toFixed(2)}"
+                transform="rotate(-90 ${CX} ${CY})"/>`;
+            cumulativeDash += dash;
+        });
+
+        const centerAmt = fmtShort(grandTotal);
+        const legendHtml = segments.map(([cat, sum], i) => {
+            const pct = ((sum / grandTotal) * 100).toFixed(1);
+            const color = CHART_COLORS[i % CHART_COLORS.length];
+            return `
+            <div class="legend-item">
+                <div class="legend-dot" style="background:${color};"></div>
+                <span class="legend-name" title="${escHtml(cat)}">${escHtml(cat)}</span>
+                <span class="legend-amt">${fmt(sum)}</span>
+                <span class="legend-pct">${pct}%</span>
+            </div>`;
+        }).join('');
+
+        document.getElementById('donut-wrap').innerHTML = `
+            <div class="donut-svg-wrap">
+                <svg viewBox="0 0 200 200" width="168" height="168">
+                    <circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="var(--border)" stroke-width="28"/>
+                    ${svgCircles}
+                    <text x="${CX}" y="${CY - 9}" text-anchor="middle" font-size="11" font-family="inherit" style="fill:var(--text-secondary);">전체</text>
+                    <text x="${CX}" y="${CY + 11}" text-anchor="middle" font-size="15" font-weight="700" font-family="inherit" style="fill:var(--text-primary);">${centerAmt}</text>
+                    <text x="${CX}" y="${CY + 27}" text-anchor="middle" font-size="10" font-family="inherit" style="fill:var(--text-secondary);">원</text>
+                </svg>
+            </div>
+            <div class="donut-legend">${legendHtml}</div>`;
+    }
+
+    /* ── ③ 예산 대비 사용률 ── */
+    function renderBudget() {
+        const saved = localStorage.getItem(BUDGET_KEY);
+        if (saved) {
+            document.getElementById('budget-input').value = Number(saved).toLocaleString('ko-KR');
+        }
+        updateBudgetDisplay(saved ? Number(saved) : 0);
+    }
+
+    function applyBudget() {
+        const raw = document.getElementById('budget-input').value.replace(/[,\s]/g, '');
+        const budget = Number(raw) || 0;
+        localStorage.setItem(BUDGET_KEY, String(budget));
+        document.getElementById('budget-input').value = budget > 0 ? budget.toLocaleString('ko-KR') : '';
+        updateBudgetDisplay(budget);
+    }
+
+    function updateBudgetDisplay(budget) {
+        const total = allReceipts.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+        const el = document.getElementById('budget-display');
+
+        if (!budget) {
+            el.innerHTML = '<p style="font-size:0.85rem;color:var(--text-secondary);margin:0.5rem 0 0;">예산을 입력하고 적용 버튼을 누르세요.</p>';
+            return;
+        }
+
+        const pctRaw = (total / budget) * 100;
+        const pctClamped = Math.min(pctRaw, 100);
+        const barColor = pctRaw >= 90 ? '#EF4444' : pctRaw >= 70 ? 'var(--warning, #F59E0B)' : 'var(--success, #10B981)';
+        const remaining = budget - total;
+
+        el.innerHTML = `
+            <div class="progress-label-row">
+                <span style="color:var(--text-secondary);">사용 ${fmt(total)}</span>
+                <span style="font-weight:700; color:${barColor};">${pctRaw.toFixed(1)}%</span>
+            </div>
+            <div class="progress-outer">
+                <div class="progress-inner" style="width:${pctClamped.toFixed(2)}%; background:${barColor};"></div>
+            </div>
+            <div class="progress-label-row" style="margin-top:0.35rem;">
+                <span class="budget-note">예산 ${fmt(budget)}</span>
+                <span class="budget-note" style="color:${remaining >= 0 ? 'var(--success,#10B981)' : '#EF4444'}; font-weight:600;">
+                    ${remaining >= 0 ? '잔여 ' + fmt(remaining) : '초과 ' + fmt(-remaining)}
+                </span>
+            </div>`;
+    }
+
+    /* ── ④ 월별/주별 막대 차트 ── */
+    function switchBarMode(mode) {
+        barMode = mode;
+        document.getElementById('btn-monthly').classList.toggle('active', mode === 'monthly');
+        document.getElementById('btn-weekly').classList.toggle('active', mode === 'weekly');
+        document.getElementById('bar-subtitle').textContent = mode === 'monthly' ? '월별 합계' : '주별 합계';
+        renderBarChart();
+    }
+
+    function renderBarChart() {
+        const grouped = {};
+        allReceipts.forEach(r => {
+            const dateStr = String(r.date || '').trim().substring(0, 10);
+            if (!dateStr || dateStr.length < 7) return;
+            const key = barMode === 'monthly' ? dateStr.substring(0, 7) : getWeekKey(dateStr);
+            if (!key) return;
+            grouped[key] = (grouped[key] || 0) + (Number(r.amount) || 0);
+        });
+
+        const sorted = Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0]));
+        const chartEl = document.getElementById('bar-chart');
+
+        if (!sorted.length) {
+            chartEl.innerHTML = '<p style="font-size:0.85rem;color:var(--text-secondary);padding:1rem 0;">표시할 데이터가 없습니다.</p>';
+            return;
+        }
+
+        const maxVal = Math.max(...sorted.map(([, v]) => v));
+        const MAX_H = 150;
+        const multiYear = new Set(sorted.map(([k]) => k.substring(0, 4))).size > 1;
+
+        chartEl.innerHTML = sorted.map(([key, val]) => {
+            const height = maxVal > 0 ? Math.max(4, Math.round((val / maxVal) * MAX_H)) : 4;
+            let label;
+            if (barMode === 'monthly') {
+                const [y, m] = key.split('-');
+                label = multiYear ? `${y.slice(2)}.${parseInt(m, 10)}` : `${parseInt(m, 10)}월`;
+            } else {
+                const [y, w] = key.split('-W');
+                label = multiYear ? `${y.slice(2)}-${parseInt(w, 10)}주` : `${parseInt(w, 10)}주차`;
+            }
+            return `
+            <div class="bar-group">
+                <div class="bar-val">${fmtShort(val)}</div>
+                <div class="bar" style="height:${height}px;" title="${escHtml(label)}: ${fmt(val)}"></div>
+                <div class="bar-lbl">${label}</div>
+            </div>`;
+        }).join('');
+    }
+
+    document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+
+    <!-- ===== MVT Script Block 4: visitors 테이블 insert ===== -->
+    <script>
+    var data = JSON.stringify(
+        {"id": getUVfromCookie(),
+            "landingUrl":window.location.href,
+            "ip":ip,
+            "referer":document.referrer,
+            "time_stamp":getTimeStamp(),
+            "utm":utm,
+            "device":mobile}
+        );
+
+    var addrScript = APPS_SCRIPT_URL;
+
+    $(document).ready(function () {
+        console.log("Document Ready");
+        axios.get(addrScript + '?action=insert&table=visitors&data=' + data)
+        .then(response => {
+            console.log(JSON.stringify(response));
+        })
+        .catch(error => {
+            if (error.response) {
+                console.log(error.response.data);
+                console.log(error.response.status);
+                console.log(error.response.headers);
+            } else if (error.request) {
+                console.log(error.request);
+            } else {
+                console.log('Error', error.message);
+            }
+            console.log(error.config);
+        });
+    });
+    </script>
+</body>
+</html>

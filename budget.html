@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>예산 관리 - ReceiptAI</title>
+    <script>if(localStorage.getItem('daynight-theme')==='carbon'){document.documentElement.classList.add('carbon');}</script>
+    <script src="https://code.jquery.com/jquery-latest.min.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="./config.js"></script>
+    <link rel="stylesheet" href="templatemo-daynight-style.css">
+    <style>
+        .spinner { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.75s linear infinite; margin:0 auto 1rem; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        .error-banner { display:none; padding:0.75rem 1rem; border-radius:8px; background:rgba(239,68,68,0.08); color:#ef4444; font-size:0.875rem; margin-bottom:1.25rem; }
+
+        .prog-outer { height:14px; background:var(--border); border-radius:99px; overflow:hidden; margin-bottom:0.35rem; }
+        .prog-inner { height:100%; border-radius:99px; transition:width 0.6s ease, background 0.3s; }
+        .prog-row { margin-bottom:1.25rem; }
+        .prog-label-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem; font-size:0.82rem; flex-wrap:wrap; gap:0.25rem; }
+
+        .budget-cat-row { display:flex; align-items:center; gap:0.75rem; padding:0.75rem 0; border-bottom:1px solid var(--border); }
+        .budget-cat-row:last-child { border-bottom:none; }
+        .budget-cat-name { flex:1; font-size:0.9rem; font-weight:500; color:var(--text-primary); }
+        .budget-cat-input {
+            width:150px; padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:8px;
+            background:var(--bg-secondary); color:var(--text-primary); font-size:0.875rem;
+            font-family:inherit; outline:none; transition:border-color 0.2s; text-align:right;
+        }
+        .budget-cat-input:focus { border-color:var(--accent); }
+        @media(max-width:480px) { .budget-cat-input { width:110px; } }
+
+        .unset-cat-row { display:flex; align-items:center; justify-content:space-between; gap:0.75rem; padding:0.7rem 0; border-bottom:1px solid var(--border); font-size:0.875rem; flex-wrap:wrap; }
+        .unset-cat-row:last-child { border-bottom:none; }
+        .compare-row { display:flex; align-items:center; gap:0.75rem; padding:0.65rem 0; font-size:0.875rem; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+        .compare-row:last-child { border-bottom:none; }
+
+        .empty-state { text-align:center; padding:3rem 1rem; color:var(--text-secondary); font-size:0.9rem; }
+        .section-gap { margin-bottom:1.5rem; }
+    </style>
+</head>
+<body>
+
+    <!-- ===== MVT Script Block 1: 헬퍼 함수 ===== -->
+    <script>
+        var mobile = 'desktop';
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+            mobile = 'mobile';
+        }
+
+        var queryString = location.search;
+        const urlParams = new URLSearchParams(queryString);
+        const utm = urlParams.get("utm");
+
+        function padValue(value) { return (value < 10) ? "0" + value : value; }
+
+        function getTimeStamp() {
+            const date = new Date();
+            const year = date.getFullYear(), month = date.getMonth() + 1, day = date.getDate();
+            const hours = date.getHours(), minutes = date.getMinutes(), seconds = date.getSeconds();
+            return `${padValue(year)}-${padValue(month)}-${padValue(day)} ${padValue(hours)}:${padValue(minutes)}:${padValue(seconds)}`;
+        }
+
+        function getCookieValue(name) {
+            const value = "; " + document.cookie;
+            const parts = value.split("; " + name + "=");
+            if (parts.length === 2) return parts.pop().split(";").shift();
+        }
+
+        function setCookieValue(name, value, days) {
+            let expires = "";
+            if (days) {
+                const date = new Date();
+                date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+                expires = "; expires=" + date.toUTCString();
+            }
+            document.cookie = name + "=" + (value || "") + expires + "; path=/";
+        }
+
+        function getUVfromCookie() {
+            const hash = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const existingHash = getCookieValue("user");
+            if (!existingHash) { setCookieValue("user", hash, 180); return hash; }
+            return existingHash;
+        }
+    </script>
+
+    <!-- ===== MVT Script Block 2: IP 수집 (JSONP) ===== -->
+    <script type="application/javascript">
+        var ip = "null";
+        function getIP(json) {
+            console.log(json);
+            try { ip = json.ip; } catch (e) { ip = 'unknown'; }
+        }
+    </script>
+    <script type="application/javascript" src="https://jsonip.com?format=jsonp&callback=getIP"></script>
+
+    <!-- Mobile Menu Overlay -->
+    <div class="mobile-menu-overlay"></div>
+
+    <!-- Mobile Menu -->
+    <div class="mobile-menu">
+        <div class="mobile-menu-header">
+            <a href="index.html" class="logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+                </div>
+                ReceiptAI
+            </a>
+            <button class="mobile-menu-close" onclick="closeMobileMenu()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <nav class="mobile-menu-nav">
+            <a href="index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                홈
+            </a>
+            <a href="receipts.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+                Receipts
+            </a>
+            <a href="analytics-receipts.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                Analytics
+            </a>
+            <a href="report.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                리포트
+            </a>
+            <a href="budget.html" class="active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><polyline points="2 10 22 10"/><circle cx="17" cy="15" r="1" fill="currentColor" stroke="none"/></svg>
+                예산 관리
+            </a>
+            <a href="settings.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                Settings
+            </a>
+        </nav>
+        <div class="mobile-menu-footer">
+            <a href="login.html" class="mobile-logout-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Logout
+            </a>
+            <div class="theme-toggle">
+                <button class="theme-btn theme-btn-snow active" onclick="setTheme('snow')" title="Snow Edition">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                </button>
+                <button class="theme-btn theme-btn-carbon" onclick="setTheme('carbon')" title="Carbon Edition">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Top Navigation -->
+        <nav class="top-nav">
+            <div class="nav-container">
+                <div class="nav-left">
+                    <a href="index.html" class="logo">
+                        <div class="logo-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+                        </div>
+                        ReceiptAI
+                    </a>
+                    <div class="nav-menu">
+                        <div class="nav-item"><a href="index.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>홈</a></div>
+                        <div class="nav-item"><a href="receipts.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>Receipts</a></div>
+                        <div class="nav-item"><a href="analytics-receipts.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Analytics</a></div>
+                        <div class="nav-item"><a href="report.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>리포트</a></div>
+                        <div class="nav-item"><a href="budget.html" class="nav-link active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><polyline points="2 10 22 10"/><circle cx="17" cy="15" r="1" fill="currentColor" stroke="none"/></svg>예산 관리</a></div>
+                        <div class="nav-item"><a href="settings.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a></div>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="theme-toggle">
+                        <button class="theme-btn theme-btn-snow active" onclick="setTheme('snow')" title="Snow Edition"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button>
+                        <button class="theme-btn theme-btn-carbon" onclick="setTheme('carbon')" title="Carbon Edition"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+                    </div>
+                    <button class="user-menu"><div class="user-avatar">A</div><span class="user-name">Alex</span></button>
+                    <a href="login.html" class="btn-logout" title="Logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
+                    <button class="mobile-menu-btn" onclick="toggleMobileMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+
+            <!-- Page Header -->
+            <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem;">
+                <div>
+                    <h1 class="greeting">예산 관리</h1>
+                    <p class="greeting-sub">월별 카테고리 예산 설정 및 집행 현황을 확인합니다</p>
+                </div>
+                <button class="btn btn-secondary" onclick="loadAndRender()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    새로고침
+                </button>
+            </div>
+
+            <!-- Error Banner -->
+            <div id="error-banner" class="error-banner"></div>
+
+            <!-- ① 예산 설정 -->
+            <div class="card section-gap">
+                <div class="card-header">
+                    <div>
+                        <h3 class="card-title">예산 설정</h3>
+                        <p class="card-subtitle">카테고리별 월 예산을 입력하세요</p>
+                    </div>
+                </div>
+
+                <!-- 월 선택 + 합계 표시 -->
+                <div style="display:flex; align-items:center; gap:1.5rem; margin-bottom:1.25rem; flex-wrap:wrap;">
+                    <div>
+                        <label style="display:block; font-size:0.78rem; font-weight:500; color:var(--text-secondary); margin-bottom:0.3rem;">적용 월</label>
+                        <input type="month" id="budget-month"
+                            style="padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:8px; background:var(--bg-secondary); color:var(--text-primary); font-size:0.9rem; font-family:inherit; outline:none; transition:border-color 0.2s; cursor:pointer;"
+                            onfocus="this.style.borderColor='var(--accent)'"
+                            onblur="this.style.borderColor='var(--border)'">
+                    </div>
+                    <div style="padding:0.65rem 1.1rem; background:var(--bg-secondary); border-radius:10px; font-size:0.875rem;">
+                        <span style="color:var(--text-secondary);">합계 예산</span>
+                        <span id="budget-total" style="font-weight:700; color:var(--accent); margin-left:0.5rem; font-size:1rem;">0</span>
+                        <span style="color:var(--text-secondary);">원</span>
+                    </div>
+                </div>
+
+                <!-- 카테고리별 입력 -->
+                <div id="budget-cat-inputs"></div>
+
+                <!-- 메모 -->
+                <div style="margin-top:1rem;">
+                    <label style="display:block; font-size:0.78rem; font-weight:500; color:var(--text-secondary); margin-bottom:0.3rem;">메모 (선택)</label>
+                    <input type="text" id="budget-note" placeholder="이 달 예산에 대한 메모"
+                        style="width:100%; padding:0.55rem 0.85rem; border:1px solid var(--border); border-radius:8px; background:var(--bg-secondary); color:var(--text-primary); font-size:0.875rem; font-family:inherit; outline:none; transition:border-color 0.2s; box-sizing:border-box;"
+                        onfocus="this.style.borderColor='var(--accent)'"
+                        onblur="this.style.borderColor='var(--border)'">
+                </div>
+
+                <!-- 저장 버튼 -->
+                <div style="margin-top:1.25rem; display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                    <button class="btn btn-primary" onclick="saveBudget()">저장</button>
+                    <span id="budget-save-msg" style="display:none; color:#10b981; font-size:0.85rem;">✓ 저장됐습니다</span>
+                </div>
+            </div>
+
+            <!-- ② 예산 대비 집행 현황 -->
+            <div class="card section-gap">
+                <div class="card-header">
+                    <div>
+                        <h3 class="card-title">예산 대비 집행 현황</h3>
+                        <p class="card-subtitle" id="execution-subtitle">이번 달 기준</p>
+                    </div>
+                </div>
+
+                <div id="execution-loading" style="text-align:center; padding:2rem;">
+                    <div class="spinner"></div>
+                    <p style="color:var(--text-secondary); font-size:0.875rem;">데이터를 불러오는 중...</p>
+                </div>
+                <div id="execution-content" style="display:none;"></div>
+                <div id="execution-empty" class="empty-state" style="display:none;">
+                    이번 달 예산이 설정되지 않았습니다.<br>
+                    <span style="font-size:0.82rem; margin-top:0.5rem; display:inline-block;">위에서 예산을 설정하고 저장해주세요.</span>
+                </div>
+            </div>
+
+            <!-- ③ 예산 미설정 카테고리 -->
+            <div class="card section-gap" id="unset-card" style="display:none;">
+                <div class="card-header">
+                    <div>
+                        <h3 class="card-title">예산 미설정 카테고리</h3>
+                        <p class="card-subtitle">예산 없이 지출이 발생한 카테고리</p>
+                    </div>
+                </div>
+                <div id="unset-content"></div>
+            </div>
+
+            <!-- ④ 전월 대비 -->
+            <div class="card section-gap" id="compare-card" style="display:none;">
+                <div class="card-header">
+                    <div>
+                        <h3 class="card-title">전월 대비</h3>
+                        <p class="card-subtitle" id="compare-subtitle">지난달과 이번 달 지출 비교</p>
+                    </div>
+                </div>
+                <div id="compare-content"></div>
+            </div>
+
+        </main>
+
+        <footer class="footer">
+            <p>&copy; 2026 ReceiptAI - OCR 기반 스마트 회계 관리</p>
+        </footer>
+    </div>
+
+    <script src="templatemo-daynight-script.js"></script>
+
+    <script>
+    /* ================================================================
+       예산 관리 — budget.html
+    ================================================================ */
+
+    if (typeof APPS_SCRIPT_URL === 'undefined') {
+        console.error('config.js가 없습니다. config.example.js를 참고하여 config.js를 생성해주세요.');
+    }
+
+    let allReceipts = [];
+
+    /* ── 유틸 ── */
+    function fmt(n) { return Number(n).toLocaleString('ko-KR') + '원'; }
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function parseAmt(str) {
+        const n = parseInt(String(str).replace(/,/g, ''), 10);
+        return isNaN(n) ? 0 : n;
+    }
+
+    /* ── 카테고리 목록 ── */
+    function getCategories() {
+        try {
+            const cats = JSON.parse(localStorage.getItem('categories') || '[]');
+            if (Array.isArray(cats) && cats.length) return cats;
+        } catch(e) {}
+        return ['식비', '교통비', '숙박비', '교육비', '행사비', '기타'];
+    }
+
+    /* ── 저장된 예산 플랜 ── */
+    function getBudgetPlan(period) {
+        try {
+            const plan = JSON.parse(localStorage.getItem('budgetPlan'));
+            if (plan && plan.period === period) return plan;
+        } catch(e) {}
+        return null;
+    }
+
+    /* ── 카테고리별 예산 입력 행 생성 ── */
+    function buildCatInputs() {
+        const cats = getCategories();
+        const period = document.getElementById('budget-month').value;
+        const plan = getBudgetPlan(period);
+        const saved = (plan && plan.categories) ? plan.categories : {};
+
+        const html = cats.map(cat => {
+            const val = saved[cat] ? Number(saved[cat]).toLocaleString('ko-KR') : '';
+            return `
+            <div class="budget-cat-row">
+                <div class="budget-cat-name">${escHtml(cat)}</div>
+                <input type="text" class="budget-cat-input" data-cat="${escHtml(cat)}"
+                    placeholder="0" inputmode="numeric"
+                    value="${escHtml(val)}"
+                    oninput="formatCatInput(this); updateTotal()"
+                    onfocus="this.select()"
+                    onblur="this.style.borderColor='var(--border)'">
+            </div>`;
+        }).join('');
+
+        document.getElementById('budget-cat-inputs').innerHTML = html;
+        updateTotal();
+    }
+
+    function formatCatInput(el) {
+        const raw = el.value.replace(/,/g, '').replace(/[^0-9]/g, '');
+        const n = parseInt(raw, 10);
+        el.value = isNaN(n) ? '' : n.toLocaleString('ko-KR');
+    }
+
+    /* ── 합계 업데이트 ── */
+    function updateTotal() {
+        let total = 0;
+        document.querySelectorAll('.budget-cat-input').forEach(inp => {
+            total += parseAmt(inp.value);
+        });
+        document.getElementById('budget-total').textContent = total.toLocaleString('ko-KR');
+    }
+
+    /* ── 예산 저장 ── */
+    function saveBudget() {
+        const period = document.getElementById('budget-month').value;
+        if (!period) { alert('적용 월을 선택해주세요.'); return; }
+
+        const categories = {};
+        document.querySelectorAll('.budget-cat-input').forEach(inp => {
+            const n = parseAmt(inp.value);
+            if (n > 0) categories[inp.dataset.cat] = n;
+        });
+
+        const plan = {
+            period,
+            categories,
+            totalNote: document.getElementById('budget-note').value.trim()
+        };
+        localStorage.setItem('budgetPlan', JSON.stringify(plan));
+
+        const msg = document.getElementById('budget-save-msg');
+        msg.style.display = 'inline';
+        setTimeout(() => { msg.style.display = 'none'; }, 2500);
+
+        renderExecution();
+    }
+
+    /* ── 데이터 로드 ── */
+    function loadAndRender() {
+        document.getElementById('execution-loading').style.display = 'block';
+        document.getElementById('execution-content').style.display = 'none';
+        document.getElementById('execution-empty').style.display = 'none';
+        document.getElementById('error-banner').style.display = 'none';
+
+        const _userUrl = localStorage.getItem('userAppsScriptUrl');
+        const _base = (_userUrl && _userUrl.trim()) ? _userUrl.trim()
+                    : (typeof APPS_SCRIPT_URL !== 'undefined' ? APPS_SCRIPT_URL : '');
+
+        if (!_base) { loadFromLocal(); return; }
+
+        $.ajax({
+            url: _base + '?action=read&table=receipts',
+            dataType: 'jsonp',
+            timeout: 15000,
+            success: function(response) {
+                const raw = response && Array.isArray(response.data) ? response.data
+                           : Array.isArray(response) ? response : [];
+                allReceipts = raw.filter(r => r != null);
+                renderExecution();
+            },
+            error: function() {
+                try { allReceipts = JSON.parse(localStorage.getItem('receipts')) || []; }
+                catch(e) { allReceipts = []; }
+                const errEl = document.getElementById('error-banner');
+                errEl.textContent = allReceipts.length
+                    ? `Sheets 연결 실패. 로컬 저장 데이터 ${allReceipts.length}건으로 표시합니다.`
+                    : 'Sheets 연결 실패. 설정에서 Google Apps Script URL을 확인해주세요.';
+                errEl.style.display = 'block';
+                renderExecution();
+            }
+        });
+    }
+
+    function loadFromLocal() {
+        try { allReceipts = JSON.parse(localStorage.getItem('receipts')) || []; }
+        catch(e) { allReceipts = []; }
+        renderExecution();
+    }
+
+    /* ── 집행 현황 렌더 ── */
+    function renderExecution() {
+        const period = document.getElementById('budget-month').value;
+        document.getElementById('execution-loading').style.display = 'none';
+        document.getElementById('execution-subtitle').textContent = period ? period + ' 기준' : '이번 달 기준';
+
+        const plan = getBudgetPlan(period);
+        const budgetCats = (plan && plan.categories) ? plan.categories : {};
+        const hasBudget = Object.keys(budgetCats).length > 0;
+
+        /* 선택 월 지출 집계 */
+        const catSpent = {};
+        allReceipts.forEach(r => {
+            const d = String(r.date || r['날짜'] || '').trim().substring(0, 7);
+            if (d !== period) return;
+            const cat = String(r.category || r['카테고리'] || '기타').trim();
+            catSpent[cat] = (catSpent[cat] || 0) + (Number(r.amount || r['금액']) || 0);
+        });
+
+        const hasSpending = Object.keys(catSpent).length > 0;
+
+        if (!hasBudget && !hasSpending) {
+            document.getElementById('execution-content').style.display = 'none';
+            document.getElementById('execution-empty').style.display = 'block';
+            document.getElementById('unset-card').style.display = 'none';
+            document.getElementById('compare-card').style.display = 'none';
+            return;
+        }
+
+        document.getElementById('execution-empty').style.display = 'none';
+        document.getElementById('execution-content').style.display = 'block';
+
+        /* 예산 있는 카테고리 vs 없는 카테고리 분리 */
+        const withBudget = [];
+        Object.entries(budgetCats).forEach(([cat, budget]) => {
+            withBudget.push({ cat, budget, spent: catSpent[cat] || 0 });
+        });
+
+        const withoutBudget = [];
+        Object.entries(catSpent).forEach(([cat, spent]) => {
+            if (!budgetCats[cat]) withoutBudget.push({ cat, spent });
+        });
+
+        /* 전체 합계 바 */
+        const totalBudget = withBudget.reduce((s, r) => s + r.budget, 0);
+        const totalSpentBudgeted = withBudget.reduce((s, r) => s + r.spent, 0);
+        const totalSpentAll = totalSpentBudgeted + withoutBudget.reduce((s, r) => s + r.spent, 0);
+
+        let totalHtml = '';
+        if (totalBudget > 0) {
+            const tp = Math.round(totalSpentBudgeted / totalBudget * 100);
+            const tc = tp >= 100 ? '#ef4444' : tp >= 90 ? '#f59e0b' : tp < 70 ? '#10b981' : 'var(--accent)';
+            const ts = tp >= 100 ? '❌ 예산 초과' : tp >= 90 ? '⚠ 예산 초과 위험' : '';
+            totalHtml = `
+            <div class="prog-row" style="padding:1rem; background:var(--bg-secondary); border-radius:12px; margin-bottom:1.5rem;">
+                <div class="prog-label-row" style="font-size:0.9rem;">
+                    <span style="font-weight:700;">전체 합계 ${ts ? `<span style="color:${tc}; font-size:0.75rem;">${ts}</span>` : ''}</span>
+                    <span style="font-weight:700; color:${tc};">${tp}%</span>
+                </div>
+                <div class="prog-outer" style="height:18px;">
+                    <div class="prog-inner" style="width:${Math.min(tp,100)}%; background:${tc};"></div>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--text-secondary); margin-top:0.2rem;">
+                    <span>집행 ${fmt(totalSpentBudgeted)}</span>
+                    <span>예산 ${fmt(totalBudget)}</span>
+                </div>
+            </div>`;
+        }
+
+        /* 카테고리별 바 (초과율 내림차순) */
+        const catHtml = withBudget
+            .sort((a, b) => (b.budget > 0 ? b.spent/b.budget : 0) - (a.budget > 0 ? a.spent/a.budget : 0))
+            .map(({ cat, budget, spent }) => {
+                const pct = budget > 0 ? Math.round(spent / budget * 100) : 0;
+                const color = pct >= 100 ? '#ef4444' : pct >= 90 ? '#f59e0b' : pct < 70 ? '#10b981' : 'var(--accent)';
+                const tag = pct >= 100
+                    ? `<span style="color:#ef4444; font-size:0.72rem; margin-left:0.4rem;">❌ 예산 초과</span>`
+                    : pct >= 90
+                    ? `<span style="color:#f59e0b; font-size:0.72rem; margin-left:0.4rem;">⚠ 예산 초과 위험</span>`
+                    : '';
+                const remain = budget - spent;
+                const remainTxt = remain >= 0
+                    ? `<span style="color:var(--text-secondary);">잔여 ${fmt(remain)}</span>`
+                    : `<span style="color:#ef4444;">초과 ${fmt(-remain)}</span>`;
+                return `
+                <div class="prog-row">
+                    <div class="prog-label-row">
+                        <span style="font-weight:600;">${escHtml(cat)}${tag}</span>
+                        <span style="font-weight:600; color:${color};">${pct}%</span>
+                    </div>
+                    <div class="prog-outer">
+                        <div class="prog-inner" style="width:${Math.min(pct,100)}%; background:${color};"></div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--text-secondary);">
+                        <span>집행 ${fmt(spent)}</span>
+                        <span style="display:flex; gap:0.75rem;">${remainTxt}<span>예산 ${fmt(budget)}</span></span>
+                    </div>
+                </div>`;
+            }).join('');
+
+        document.getElementById('execution-content').innerHTML =
+            totalHtml + (catHtml || '<div class="empty-state" style="padding:1.5rem 0;">이 달 집행 내역이 없습니다</div>');
+
+        /* ③ 예산 미설정 카테고리 */
+        const unsetCard = document.getElementById('unset-card');
+        if (withoutBudget.length) {
+            unsetCard.style.display = 'block';
+            document.getElementById('unset-content').innerHTML = withoutBudget
+                .sort((a, b) => b.spent - a.spent)
+                .map(({ cat, spent }) => `
+                <div class="unset-cat-row">
+                    <span style="font-weight:600; color:var(--text-primary);">${escHtml(cat)}</span>
+                    <span style="color:var(--text-secondary); font-size:0.82rem;">예산 미설정 — 지출만 표시</span>
+                    <span style="font-weight:600; color:var(--text-primary);">${fmt(spent)}</span>
+                </div>`).join('');
+        } else {
+            unsetCard.style.display = 'none';
+        }
+
+        /* ④ 전월 대비 */
+        renderCompare(period, totalSpentAll);
+    }
+
+    /* ── 전월 대비 ── */
+    function renderCompare(period, currTotalAll) {
+        const compareCard = document.getElementById('compare-card');
+        if (!period) { compareCard.style.display = 'none'; return; }
+
+        const [yr, mo] = period.split('-').map(Number);
+        const prevDate = new Date(yr, mo - 2, 1);
+        const prevPeriod = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+
+        const currReceipts = allReceipts.filter(r =>
+            String(r.date || r['날짜'] || '').trim().substring(0, 7) === period);
+        const prevReceipts = allReceipts.filter(r =>
+            String(r.date || r['날짜'] || '').trim().substring(0, 7) === prevPeriod);
+
+        if (!prevReceipts.length) { compareCard.style.display = 'none'; return; }
+
+        const currTotal = currReceipts.reduce((s, r) => s + (Number(r.amount || r['금액']) || 0), 0);
+        const prevTotal = prevReceipts.reduce((s, r) => s + (Number(r.amount || r['금액']) || 0), 0);
+        const diff = currTotal - prevTotal;
+        const diffColor = diff > 0 ? '#ef4444' : diff < 0 ? '#10b981' : 'var(--text-secondary)';
+        const diffSign = diff > 0 ? '+' : '';
+        const diffLabel = diff > 0
+            ? `지난달보다 ${Math.abs(diff).toLocaleString('ko-KR')}원 더 사용했습니다`
+            : diff < 0
+            ? `지난달보다 ${Math.abs(diff).toLocaleString('ko-KR')}원 덜 사용했습니다`
+            : '지난달과 지출이 동일합니다';
+
+        /* 카테고리별 비교 */
+        const currCats = {}, prevCats = {};
+        currReceipts.forEach(r => {
+            const c = String(r.category || r['카테고리'] || '기타').trim();
+            currCats[c] = (currCats[c] || 0) + (Number(r.amount || r['금액']) || 0);
+        });
+        prevReceipts.forEach(r => {
+            const c = String(r.category || r['카테고리'] || '기타').trim();
+            prevCats[c] = (prevCats[c] || 0) + (Number(r.amount || r['금액']) || 0);
+        });
+
+        const allCats = [...new Set([...Object.keys(currCats), ...Object.keys(prevCats)])];
+        const catRows = allCats
+            .sort((a, b) => Math.abs((currCats[b]||0)-(prevCats[b]||0)) - Math.abs((currCats[a]||0)-(prevCats[a]||0)))
+            .map(cat => {
+                const prev = prevCats[cat] || 0;
+                const curr = currCats[cat] || 0;
+                const d = curr - prev;
+                const dc = d > 0 ? '#ef4444' : d < 0 ? '#10b981' : 'var(--text-secondary)';
+                const ds = d === 0 ? '동일' : (d > 0 ? '▲ ' : '▼ ') + Math.abs(d).toLocaleString('ko-KR') + '원';
+                return `
+                <div class="compare-row">
+                    <span style="flex:1; min-width:60px; font-weight:600; color:var(--text-primary);">${escHtml(cat)}</span>
+                    <span style="color:var(--text-secondary); font-size:0.82rem;">${fmt(prev)} → ${fmt(curr)}</span>
+                    <span style="font-weight:600; color:${dc}; min-width:100px; text-align:right;">${ds}</span>
+                </div>`;
+            }).join('');
+
+        compareCard.style.display = 'block';
+        document.getElementById('compare-subtitle').textContent = `${prevPeriod} → ${period} 비교`;
+        document.getElementById('compare-content').innerHTML = `
+            <div style="text-align:center; padding:0.75rem 0 1.25rem; border-bottom:1px solid var(--border); margin-bottom:1rem;">
+                <div style="font-size:1.6rem; font-weight:800; color:${diffColor};">${diffSign}${diff.toLocaleString('ko-KR')}원</div>
+                <div style="font-size:0.875rem; color:var(--text-secondary); margin-top:0.35rem;">${escHtml(diffLabel)}</div>
+            </div>
+            ${catRows}`;
+    }
+
+    /* ── 초기화 ── */
+    document.addEventListener('DOMContentLoaded', function() {
+        const now = new Date();
+        const defaultPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        document.getElementById('budget-month').value = defaultPeriod;
+
+        const savedPlan = getBudgetPlan(defaultPeriod);
+        if (savedPlan && savedPlan.totalNote) {
+            document.getElementById('budget-note').value = savedPlan.totalNote;
+        }
+
+        buildCatInputs();
+        loadAndRender();
+
+        document.getElementById('budget-month').addEventListener('change', function() {
+            const plan = getBudgetPlan(this.value);
+            document.getElementById('budget-note').value = (plan && plan.totalNote) ? plan.totalNote : '';
+            buildCatInputs();
+            loadAndRender();
+        });
+    });
+    </script>
+
+    <!-- ===== MVT Script Block 4: visitors 테이블 insert ===== -->
+    <script>
+    var data = JSON.stringify(
+        {"id": getUVfromCookie(),
+            "landingUrl":window.location.href,
+            "ip":ip,
+            "referer":document.referrer,
+            "time_stamp":getTimeStamp(),
+            "utm":utm,
+            "device":mobile}
+        );
+
+    var addrScript = APPS_SCRIPT_URL;
+
+    $(document).ready(function () {
+        console.log("Document Ready");
+        axios.get(addrScript + '?action=insert&table=visitors&data=' + data)
+        .then(response => {
+            console.log(JSON.stringify(response));
+        })
+        .catch(error => {
+            if (error.response) {
+                console.log(error.response.data);
+                console.log(error.response.status);
+                console.log(error.response.headers);
+            } else if (error.request) {
+                console.log(error.request);
+            } else {
+                console.log('Error', error.message);
+            }
+            console.log(error.config);
+        });
+    });
+    </script>
+</body>
+</html>

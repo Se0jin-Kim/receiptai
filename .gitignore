@@ -1,0 +1,6 @@
+config.js
+.DS_Store
+node_modules/
+test-gemini.html
+about-templatemo.html
+*.env

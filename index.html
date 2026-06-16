@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReceiptAI - 스마트 영수증 회계 관리</title>
+    <script>
+        // Prevent flash of white in dark mode - runs before CSS/page render
+        if (localStorage.getItem('daynight-theme') === 'carbon') {
+            document.documentElement.classList.add('carbon');
+        }
+    </script>
+    <script src="https://code.jquery.com/jquery-latest.min.js"></script>
+	<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="templatemo-daynight-style.css">
+    <!--
+
+TemplateMo 608 ReceiptAI Admin
+
+https://templatemo.com/tm-608-daynight-admin
+
+-->
+    <script src="./config.js"></script>
+</head>
+<body>
+    <!-- ===== MVT Script Block 1: 헬퍼 함수 ===== -->
+    <script>
+        var mobile = 'desktop';
+            if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+                // true for mobile device
+                mobile = 'mobile';
+            }
+
+        var queryString = location.search;
+        const urlParams = new URLSearchParams(queryString);
+        const utm = urlParams.get("utm")
+
+
+        // Sam pading value to start with 0. eg: 01, 02, .. 09, 10, ..
+        function padValue(value) {
+            return (value < 10) ? "0" + value : value;
+        }
+
+        function getTimeStamp() {
+            const date = new Date();
+
+            const year = date.getFullYear();
+            const month = date.getMonth() + 1;
+            const day = date.getDate();
+            const hours = date.getHours();
+            const minutes = date.getMinutes();
+            const seconds = date.getSeconds();
+
+            const formattedDate = `${padValue(year)}-${padValue(month)}-${padValue(day)} ${padValue(hours)}:${padValue(minutes)}:${padValue(seconds)}`;
+
+            return formattedDate;
+        }
+        function getCookieValue(name) {
+                        const value = "; " + document.cookie;
+                        const parts = value.split("; " + name + "=");
+                        if (parts.length === 2) {
+                            return parts.pop().split(";").shift();
+                        }
+                    }
+
+                    // 쿠키에 값을 저장하는 함수
+                    function setCookieValue(name, value, days) {
+                        let expires = "";
+                        if (days) {
+                            const date = new Date();
+                            date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+                            expires = "; expires=" + date.toUTCString();
+                        }
+                        document.cookie = name + "=" + (value || "") + expires + "; path=/";
+                    }
+
+                    function getUVfromCookie() {
+                        // 6자리 임의의 문자열 생성
+                        const hash = Math.random().toString(36).substring(2, 8).toUpperCase();
+                        // 쿠키에서 기존 해시 값을 가져옴
+                        const existingHash = getCookieValue("user");
+                        // 기존 해시 값이 없으면, 새로운 해시 값을 쿠키에 저장
+                        if (!existingHash) {
+                            setCookieValue("user", hash, 180); // 쿠키 만료일은 6개월
+                            return hash;
+                        } else {
+                            // 기존 해시 값이 있으면, 기존 값을 반환
+                            return existingHash;
+                        }
+                    }
+
+                    /* 수정 payload data -> id:getUVfromCookie() */
+    </script>
+
+    <!-- ===== MVT Script Block 2: IP 수집 (JSONP) ===== -->
+    <script type="application/javascript">
+					var ip = "null";
+					function getIP(json) {
+					    console.log(json);
+					    try {
+							ip = json.ip;
+					    } catch (e) {
+							ip = 'unknown';
+					    }
+					    return;
+					}
+					</script>
+					<script type="application/javascript" src="https://jsonip.com?format=jsonp&callback=getIP"></script>
+
+    <!-- Mobile Menu Overlay -->
+    <div class="mobile-menu-overlay"></div>
+    
+    <!-- Mobile Menu -->
+    <div class="mobile-menu">
+        <div class="mobile-menu-header">
+            <a href="index.html" class="logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/>
+                    </svg>
+                </div>
+                ReceiptAI
+            </a>
+            <button class="mobile-menu-close" onclick="closeMobileMenu()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <nav class="mobile-menu-nav">
+            <a href="index.html" class="active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1"/>
+                    <rect x="14" y="3" width="7" height="7" rx="1"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1"/>
+                    <rect x="14" y="14" width="7" height="7" rx="1"/>
+                </svg>
+                홈
+            </a>
+            <a href="receipts.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+                    <rect x="9" y="3" width="6" height="4" rx="1"/>
+                    <line x1="9" y1="12" x2="15" y2="12"/>
+                    <line x1="9" y1="16" x2="13" y2="16"/>
+                </svg>
+                Receipts
+            </a>
+            <a href="analytics-receipts.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+                </svg>
+                Analytics
+            </a>
+            <a href="report.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                리포트
+            </a>
+            <a href="budget.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><polyline points="2 10 22 10"/><circle cx="17" cy="15" r="1" fill="currentColor" stroke="none"/></svg>
+                예산 관리
+            </a>
+            <a href="settings.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                Settings
+            </a>
+        </nav>
+        <div class="mobile-menu-footer">
+            <a href="login.html" class="mobile-logout-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+                Logout
+            </a>
+            <div class="theme-toggle">
+                <button class="theme-btn theme-btn-snow active" onclick="setTheme('snow')" title="Snow Edition">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"/>
+                        <line x1="12" y1="1" x2="12" y2="3"/>
+                        <line x1="12" y1="21" x2="12" y2="23"/>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                        <line x1="1" y1="12" x2="3" y2="12"/>
+                        <line x1="21" y1="12" x2="23" y2="12"/>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                </button>
+                <button class="theme-btn theme-btn-carbon" onclick="setTheme('carbon')" title="Carbon Edition">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Top Navigation -->
+        <nav class="top-nav">
+            <div class="nav-container">
+                <div class="nav-left">
+                    <a href="index.html" class="logo">
+                        <div class="logo-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/>
+                            </svg>
+                        </div>
+                        ReceiptAI
+                    </a>
+                    <div class="nav-menu">
+                        <div class="nav-item">
+                            <a href="index.html" class="nav-link active">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="3" width="7" height="7" rx="1"/>
+                                    <rect x="14" y="3" width="7" height="7" rx="1"/>
+                                    <rect x="3" y="14" width="7" height="7" rx="1"/>
+                                    <rect x="14" y="14" width="7" height="7" rx="1"/>
+                                </svg>
+                                홈
+                            </a>
+                        </div>
+                        <div class="nav-item">
+                            <a href="receipts.html" class="nav-link">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+                                    <rect x="9" y="3" width="6" height="4" rx="1"/>
+                                    <line x1="9" y1="12" x2="15" y2="12"/>
+                                    <line x1="9" y1="16" x2="13" y2="16"/>
+                                </svg>
+                                Receipts
+                            </a>
+                        </div>
+                        <div class="nav-item">
+                            <a href="analytics-receipts.html" class="nav-link">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+                                </svg>
+                                Analytics
+                            </a>
+                        </div>
+                        <div class="nav-item">
+                            <a href="report.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>리포트</a>
+                        </div>
+                        <div class="nav-item"><a href="budget.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><polyline points="2 10 22 10"/><circle cx="17" cy="15" r="1" fill="currentColor" stroke="none"/></svg>예산 관리</a></div>
+                        <div class="nav-item">
+                            <a href="settings.html" class="nav-link">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="3"/>
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                                </svg>
+                                Settings
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="theme-toggle">
+                        <button class="theme-btn theme-btn-snow active" onclick="setTheme('snow')" title="Snow Edition">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="5"/>
+                                <line x1="12" y1="1" x2="12" y2="3"/>
+                                <line x1="12" y1="21" x2="12" y2="23"/>
+                                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                                <line x1="1" y1="12" x2="3" y2="12"/>
+                                <line x1="21" y1="12" x2="23" y2="12"/>
+                                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                            </svg>
+                        </button>
+                        <button class="theme-btn theme-btn-carbon" onclick="setTheme('carbon')" title="Carbon Edition">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <button class="user-menu">
+                        <div class="user-avatar">A</div>
+                        <span class="user-name">Alex</span>
+                    </button>
+                    <a href="login.html" class="btn-logout" title="Logout">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                            <polyline points="16 17 21 12 16 7"/>
+                            <line x1="21" y1="12" x2="9" y2="12"/>
+                        </svg>
+                    </a>
+                    <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="3" y1="12" x2="21" y2="12"/>
+                            <line x1="3" y1="6" x2="21" y2="6"/>
+                            <line x1="3" y1="18" x2="21" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <style>
+                .quiz-choice {
+                    width:100%; padding:0.95rem 1.1rem; text-align:left;
+                    border:1.5px solid var(--border); border-radius:10px;
+                    background:var(--bg-secondary); color:var(--text-primary);
+                    font-size:0.9rem; font-family:inherit; cursor:pointer;
+                    transition:border-color 0.15s, background 0.15s; line-height:1.45;
+                }
+                .quiz-choice:hover:not(:disabled) { border-color:var(--accent); background:rgba(99,102,241,0.06); }
+                .quiz-choice:disabled { cursor:default; }
+                .quiz-result-circle {
+                    display:inline-flex; align-items:center; justify-content:center;
+                    width:80px; height:80px; border-radius:50%;
+                    background:rgba(99,102,241,0.1); border:3px solid var(--accent);
+                    font-size:2rem; margin-bottom:0.85rem;
+                }
+                .dash-action {
+                    display:flex; flex-direction:column; align-items:center;
+                    text-align:center; padding:1.5rem 1rem; border-radius:12px;
+                    border:1px solid var(--border); text-decoration:none;
+                    color:var(--text-primary); background:var(--bg-card, var(--card-bg, #fff));
+                    transition:border-color 0.15s, background 0.15s, transform 0.15s;
+                }
+                .dash-action:hover { border-color:var(--accent); background:rgba(99,102,241,0.04); transform:translateY(-2px); }
+                .dash-action-icon { font-size:2rem; margin-bottom:0.65rem; }
+                .dash-action-label { font-weight:600; font-size:0.9rem; }
+                #profile-modal-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center; padding:1rem; }
+                #profile-modal-backdrop.open { display:flex; }
+                .service-intro-header {
+                    width:100%; padding:0.9rem 1.25rem;
+                    background:var(--accent); border:none; border-radius:12px;
+                    cursor:pointer; display:flex; align-items:center; justify-content:space-between;
+                    font-family:inherit; color:#fff; text-align:left;
+                    font-size:0.9rem; font-weight:700; letter-spacing:0.01em;
+                    transition:opacity 0.15s;
+                }
+                .service-intro-header:hover { opacity:0.85; }
+            </style>
+
+            <!-- ── 퀴즈 뷰 (최초 진입 화면) ── -->
+            <div id="quiz-view">
+                <div class="card" id="quiz-section" style="padding:2rem 1.5rem;">
+                    <div style="text-align:center; margin-bottom:1.75rem;">
+                        <div style="font-size:0.82rem; font-weight:600; color:var(--accent); letter-spacing:0.06em; text-transform:uppercase; margin-bottom:0.5rem;">30초 진단</div>
+                        <h2 style="font-size:1.3rem; font-weight:800; color:var(--text-primary); margin-bottom:0.4rem;">혹시 나도 회계 자동화가 필요할까?</h2>
+                        <p style="font-size:0.9rem; color:var(--text-secondary); margin:0;">5가지 질문으로 알아보세요</p>
+                    </div>
+
+                    <!-- 진행률 바 -->
+                    <div id="quiz-progress-wrap" style="margin-bottom:1.5rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.45rem;">
+                            <span style="font-size:0.78rem; color:var(--text-secondary);">질문 <span id="quiz-current">1</span> / 5</span>
+                            <span style="font-size:0.78rem; color:var(--accent); font-weight:600;"><span id="quiz-pct">0</span>% 완료</span>
+                        </div>
+                        <div style="height:5px; background:var(--border); border-radius:99px; overflow:hidden;">
+                            <div id="quiz-bar" style="height:100%; background:var(--accent); border-radius:99px; transition:width 0.35s; width:0%;"></div>
+                        </div>
+                    </div>
+
+                    <!-- 질문 슬라이드 -->
+                    <div id="quiz-questions" style="max-width:560px; margin:0 auto;">
+                        <div id="question-1">
+                            <div style="font-size:1rem; font-weight:700; color:var(--text-primary); margin-bottom:1rem; line-height:1.45;">Q1. "행사가 끝나면 나는..."</div>
+                            <div style="display:flex; flex-direction:column; gap:0.6rem;">
+                                <button class="quiz-choice" onclick="selectAnswer(1,'A')">영수증을 모아뒀다가 나중에 한꺼번에 정리한다</button>
+                                <button class="quiz-choice" onclick="selectAnswer(1,'B')">그때그때 바로 기록해서 밀리지 않게 한다</button>
+                            </div>
+                        </div>
+                        <div id="question-2">
+                            <div style="font-size:1rem; font-weight:700; color:var(--text-primary); margin-bottom:1rem; line-height:1.45;">Q2. "지출 내역에 오류가 있을 때 나는..."</div>
+                            <div style="display:flex; flex-direction:column; gap:0.6rem;">
+                                <button class="quiz-choice" onclick="selectAnswer(2,'A')">전체 장부를 다시 검토하며 어디서 틀렸는지 찾는다</button>
+                                <button class="quiz-choice" onclick="selectAnswer(2,'B')">오류가 거의 없어서 검토할 일이 드물다</button>
+                            </div>
+                        </div>
+                        <div id="question-3">
+                            <div style="font-size:1rem; font-weight:700; color:var(--text-primary); margin-bottom:1rem; line-height:1.45;">Q3. "영수증을 보관할 때 나는..."</div>
+                            <div style="display:flex; flex-direction:column; gap:0.6rem;">
+                                <button class="quiz-choice" onclick="selectAnswer(3,'A')">봉투나 파일에 모아두지만 가끔 잃어버린다</button>
+                                <button class="quiz-choice" onclick="selectAnswer(3,'B')">스캔하거나 사진으로 찍어 디지털로 정리해둔다</button>
+                            </div>
+                        </div>
+                        <div id="question-4">
+                            <div style="font-size:1rem; font-weight:700; color:var(--text-primary); margin-bottom:1rem; line-height:1.45;">Q4. "회계 결산 보고서를 만들 때 나는..."</div>
+                            <div style="display:flex; flex-direction:column; gap:0.6rem;">
+                                <button class="quiz-choice" onclick="selectAnswer(4,'A')">여러 자료를 일일이 모아서 정리하는 데 시간이 걸린다</button>
+                                <button class="quiz-choice" onclick="selectAnswer(4,'B')">버튼 한 번이면 바로 정리된 자료를 받을 수 있다</button>
+                            </div>
+                        </div>
+                        <div id="question-5">
+                            <div style="font-size:1rem; font-weight:700; color:var(--text-primary); margin-bottom:1rem; line-height:1.45;">Q5. "동료가 '이번 달 식비 얼마 썼어?'라고 물으면 나는..."</div>
+                            <div style="display:flex; flex-direction:column; gap:0.6rem;">
+                                <button class="quiz-choice" onclick="selectAnswer(5,'A')">장부를 뒤져봐야 정확히 답할 수 있다</button>
+                                <button class="quiz-choice" onclick="selectAnswer(5,'B')">바로 확인해서 답해줄 수 있다</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 결과 화면 -->
+                    <div id="quiz-result" style="display:none; text-align:center; padding:0.5rem 0;">
+                        <div class="quiz-result-circle" id="quiz-result-emoji"></div>
+                        <div style="font-size:0.75rem; font-weight:600; color:var(--text-secondary); letter-spacing:0.04em; margin-bottom:0.45rem;" id="quiz-acount"></div>
+                        <span style="display:inline-block; padding:0.28rem 0.8rem; background:rgba(99,102,241,0.1); color:var(--accent); border-radius:99px; font-size:0.8rem; font-weight:600; margin-bottom:1rem;" id="quiz-result-badge"></span>
+                        <p style="font-size:1rem; font-weight:700; color:var(--text-primary); line-height:1.65; margin-bottom:1.5rem;" id="quiz-result-msg"></p>
+                        <div style="display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap;">
+                            <button onclick="retakeQuiz()" class="btn btn-ghost" style="font-size:0.875rem;">🔄 다시 풀기</button>
+                            <button onclick="enterDashboard()"
+                                style="padding:0.75rem 1.5rem; background:var(--accent); color:#fff; border:none; border-radius:10px; font-size:0.875rem; font-weight:700; cursor:pointer; transition:opacity 0.2s;"
+                                onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+                                ReceiptAI 체험해보러 가기 →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── 대시보드(홈) 뷰 (퀴즈 완료 후 표시) ── -->
+            <div id="dashboard-view" style="display:none;">
+                <!-- 환영 카드 -->
+                <div class="card" style="text-align:center; padding:2.5rem 2rem 2rem; margin-bottom:1.5rem; background:linear-gradient(135deg, var(--accent-light, rgba(99,102,241,0.08)) 0%, var(--bg-secondary) 100%);">
+                    <div style="font-size:0.82rem; font-weight:600; color:var(--accent); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:0.75rem;">ReceiptAI</div>
+                    <h1 style="font-size:clamp(1.4rem, 3vw, 2rem); font-weight:800; color:var(--text-primary); line-height:1.3; margin-bottom:0.75rem;">환영합니다<span id="dashboard-username-text"></span>! 👋</h1>
+                    <p style="font-size:0.95rem; color:var(--text-secondary); max-width:420px; margin:0 auto;">영수증 한 장 찍으면 끝 — 지금 바로 시작해보세요</p>
+                </div>
+
+                <!-- 빠른 이동 카드 -->
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
+                    <a href="receipts.html" class="dash-action">
+                        <div class="dash-action-icon">📸</div>
+                        <div class="dash-action-label">영수증 등록</div>
+                        <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.3rem;">OCR 자동 인식</div>
+                    </a>
+                    <a href="analytics-receipts.html" class="dash-action">
+                        <div class="dash-action-icon">📊</div>
+                        <div class="dash-action-label">지출 분석</div>
+                        <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.3rem;">카테고리별 분석</div>
+                    </a>
+                    <a href="report.html" class="dash-action">
+                        <div class="dash-action-icon">📋</div>
+                        <div class="dash-action-label">리포트</div>
+                        <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.3rem;">결산 보고서 생성</div>
+                    </a>
+                    <a href="settings.html" class="dash-action">
+                        <div class="dash-action-icon">⚙️</div>
+                        <div class="dash-action-label">설정</div>
+                        <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.3rem;">내 정보 · Sheets 연결</div>
+                    </a>
+                </div>
+
+                <!-- 예산 현황 위젯 -->
+                <div id="budget-widget" class="card" style="margin-bottom:1.5rem; padding:1.25rem 1.5rem;"></div>
+
+                <!-- ReceiptAI 소개 (기본 접힘, 클릭 시 펼쳐짐) -->
+                <div style="margin-bottom:1.5rem;">
+                    <button id="service-info-toggle-btn" onclick="toggleServiceInfo(this)" class="service-intro-header">
+                        <span style="display:flex; align-items:center; gap:0.6rem;">
+                            <span>💡</span>
+                            <span>ReceiptAI 소개</span>
+                        </span>
+                        <span id="service-info-arrow" style="font-size:0.75rem; transition:transform 0.25s; display:inline-block; flex-shrink:0; opacity:0.85;">▼</span>
+                    </button>
+                    <div id="service-info-body" style="display:none; margin-top:0.65rem;">
+                        <div class="card" style="padding:1.5rem;">
+
+                            <!-- 문제 정의 -->
+                            <p style="font-size:0.72rem; font-weight:700; color:var(--text-secondary); letter-spacing:0.06em; text-transform:uppercase; margin:0 0 0.9rem;">이런 문제 겪고 있지 않으신가요?</p>
+                            <div class="stats-grid">
+                                <div class="stat-card">
+                                    <div class="stat-value" style="font-size:1.5rem;">⏱</div>
+                                    <div class="stat-label" style="font-weight:700; font-size:0.9rem; margin:0.5rem 0 0.4rem;">영수증 정리할 때<br>한숨 나오지 않나요?</div>
+                                    <div style="font-size:0.82rem; color:var(--text-secondary); line-height:1.5;">모아둔 영수증을 일일이 타이핑하다 보면 한 시간이 훌쩍. 단체 규모가 클수록 이 부담은 기하급수적으로 커집니다.</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value" style="font-size:1.5rem;">❌</div>
+                                    <div class="stat-label" style="font-weight:700; font-size:0.9rem; margin:0.5rem 0 0.4rem;">숫자 하나 틀려서<br>장부를 다시 뒤진 적 있나요?</div>
+                                    <div style="font-size:0.82rem; color:var(--text-secondary); line-height:1.5;">오타 한 글자가 결산 마감 직전에 발견되면, 그날 야근은 예약된 것입니다. 사람이 직접 입력하는 한 오류는 피할 수 없습니다.</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value" style="font-size:1.5rem;">📄</div>
+                                    <div class="stat-label" style="font-weight:700; font-size:0.9rem; margin:0.5rem 0 0.4rem;">영수증 잃어버려서<br>정산이 꼬인 적 있나요?</div>
+                                    <div style="font-size:0.82rem; color:var(--text-secondary); line-height:1.5;">감사나 보조금 정산 때 증빙 서류 하나가 없으면 전체가 흔들립니다. 종이 영수증은 언제든 분실·훼손될 수 있습니다.</div>
+                                </div>
+                            </div>
+
+                            <!-- 솔루션 -->
+                            <div style="margin-top:1.75rem;">
+                                <p style="font-size:0.72rem; font-weight:700; color:var(--text-secondary); letter-spacing:0.06em; text-transform:uppercase; margin:0 0 0.9rem;">이렇게 해결합니다</p>
+                                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:0.75rem; align-items:center;">
+                                    <div style="text-align:center; padding:1.1rem 0.8rem; border-radius:12px; background:var(--bg-secondary);">
+                                        <div style="font-size:2rem; margin-bottom:0.6rem;">📸</div>
+                                        <div style="font-weight:700; color:var(--accent); margin-bottom:0.35rem; font-size:0.9rem;">1단계 · 영수증 촬영</div>
+                                        <div style="font-size:0.8rem; color:var(--text-secondary); line-height:1.5;">스마트폰으로 영수증 사진 한 장</div>
+                                    </div>
+                                    <div style="text-align:center; font-size:1.25rem; color:var(--border);">→</div>
+                                    <div style="text-align:center; padding:1.1rem 0.8rem; border-radius:12px; background:var(--bg-secondary);">
+                                        <div style="font-size:2rem; margin-bottom:0.6rem;">🤖</div>
+                                        <div style="font-weight:700; color:var(--accent); margin-bottom:0.35rem; font-size:0.9rem;">2단계 · AI 자동 분석</div>
+                                        <div style="font-size:0.8rem; color:var(--text-secondary); line-height:1.5;">Gemini AI가 상호명·날짜·금액 즉시 추출</div>
+                                    </div>
+                                    <div style="text-align:center; font-size:1.25rem; color:var(--border);">→</div>
+                                    <div style="text-align:center; padding:1.1rem 0.8rem; border-radius:12px; background:var(--bg-secondary);">
+                                        <div style="font-size:2rem; margin-bottom:0.6rem;">✅</div>
+                                        <div style="font-weight:700; color:var(--accent); margin-bottom:0.35rem; font-size:0.9rem;">3단계 · 자동 정리·보관</div>
+                                        <div style="font-size:0.8rem; color:var(--text-secondary); line-height:1.5;">회계 장부 자동 기입 + 이미지 1:1 매칭</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 비교 테이블 -->
+                            <div style="margin-top:1.75rem;">
+                                <p style="font-size:0.72rem; font-weight:700; color:var(--text-secondary); letter-spacing:0.06em; text-transform:uppercase; margin:0 0 0.9rem;">기존 방식과 무엇이 다른가요?</p>
+                                <div style="overflow-x:auto;">
+                                    <table style="width:100%; border-collapse:collapse; font-size:0.875rem; min-width:380px;">
+                                        <thead><tr>
+                                            <th style="padding:0.65rem 0.85rem; text-align:left; border-bottom:2px solid var(--border); color:var(--text-secondary); font-weight:600; width:22%;">구분</th>
+                                            <th style="padding:0.65rem 0.85rem; text-align:left; border-bottom:2px solid var(--border); color:var(--text-secondary); font-weight:600; width:39%;">기존 방식</th>
+                                            <th style="padding:0.65rem 0.85rem; text-align:left; border-bottom:2px solid rgba(99,102,241,0.4); color:var(--accent); font-weight:700; width:39%; background:rgba(99,102,241,0.06);">이 서비스</th>
+                                        </tr></thead>
+                                        <tbody>
+                                            <tr><td style="padding:0.75rem 0.85rem; border-bottom:1px solid var(--border); font-weight:600; color:var(--text-primary);">데이터 입력</td><td style="padding:0.75rem 0.85rem; border-bottom:1px solid var(--border); color:var(--text-secondary);">수기 타이핑, 수십 분</td><td style="padding:0.75rem 0.85rem; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--accent); font-weight:600; background:rgba(99,102,241,0.04);">촬영 한 번으로 즉시 완료</td></tr>
+                                            <tr><td style="padding:0.75rem 0.85rem; border-bottom:1px solid var(--border); font-weight:600; color:var(--text-primary);">오류 발생</td><td style="padding:0.75rem 0.85rem; border-bottom:1px solid var(--border); color:var(--text-secondary);">오타·분류 실수 빈발</td><td style="padding:0.75rem 0.85rem; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--accent); font-weight:600; background:rgba(99,102,241,0.04);">AI 자동 추출로 인적 오류 최소화</td></tr>
+                                            <tr><td style="padding:0.75rem 0.85rem; border-bottom:1px solid var(--border); font-weight:600; color:var(--text-primary);">증빙 보관</td><td style="padding:0.75rem 0.85rem; border-bottom:1px solid var(--border); color:var(--text-secondary);">영수증 분실·매칭 어려움</td><td style="padding:0.75rem 0.85rem; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--accent); font-weight:600; background:rgba(99,102,241,0.04);">데이터와 이미지 자동 연결 보관</td></tr>
+                                            <tr><td style="padding:0.75rem 0.85rem; font-weight:600; color:var(--text-primary);">보고 준비</td><td style="padding:0.75rem 0.85rem; color:var(--text-secondary);">자료 취합 번거로움</td><td style="padding:0.75rem 0.85rem; color:var(--accent); font-weight:600; background:rgba(99,102,241,0.04);">언제든 검색·CSV 출력 가능</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- 대상 고객군 -->
+                            <div style="margin-top:1.75rem;">
+                                <p style="font-size:0.72rem; font-weight:700; color:var(--text-secondary); letter-spacing:0.06em; text-transform:uppercase; margin:0 0 0.9rem;">이런 분들께 잘 맞습니다</p>
+                                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:0.7rem;">
+                                    <div style="padding:1rem; border-radius:12px; border:1px solid var(--border); text-align:center;"><div style="font-size:1.5rem; margin-bottom:0.4rem;">🎓</div><div style="font-weight:600; color:var(--text-primary); font-size:0.82rem;">대학교 동아리·학생회</div></div>
+                                    <div style="padding:1rem; border-radius:12px; border:1px solid var(--border); text-align:center;"><div style="font-size:1.5rem; margin-bottom:0.4rem;">🤝</div><div style="font-weight:600; color:var(--text-primary); font-size:0.82rem;">사회단체·비영리법인</div></div>
+                                    <div style="padding:1rem; border-radius:12px; border:1px solid var(--border); text-align:center;"><div style="font-size:1.5rem; margin-bottom:0.4rem;">🚀</div><div style="font-weight:600; color:var(--text-primary); font-size:0.82rem;">소규모 스타트업·팀</div></div>
+                                    <div style="padding:1rem; border-radius:12px; border:1px solid var(--border); text-align:center;"><div style="font-size:1.5rem; margin-bottom:0.4rem;">🏘</div><div style="font-weight:600; color:var(--text-primary); font-size:0.82rem;">지역 커뮤니티·종교단체</div></div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 이메일 수집 (tab_final, 기존 ⑦) -->
+                <div class="card" style="padding:2rem 1.5rem;">
+                    <h2 style="font-size:1.2rem; font-weight:700; color:var(--text-primary); text-align:center; margin-bottom:0.5rem;">서비스 출시 알림 받기</h2>
+                    <p style="text-align:center; color:var(--text-secondary); font-size:0.875rem; margin-bottom:1.5rem;">이메일을 남겨주시면 서비스가 런칭되었을 때 알림을 드리겠습니다.</p>
+                    <div style="max-width:480px; margin:0 auto; display:flex; flex-direction:column; gap:1rem;">
+                        <input id="submit-email" type="email" placeholder="알림을 받으실 이메일"
+                            style="padding:0.65rem 0.9rem; border:1px solid var(--border); border-radius:8px; background:var(--bg-secondary); color:var(--text-primary); font-size:0.9rem; font-family:inherit; outline:none; transition:border-color 0.2s; width:100%; box-sizing:border-box;"
+                            onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+                        <p style="color:var(--text-secondary); font-size:0.875rem; margin:0;">서비스가 이렇게 되었으면 좋겠다는 조언을 해 주세요</p>
+                        <textarea id="submit-advice" name="Text1" rows="4"
+                            placeholder="서비스에 대한 조언을 남겨주세요"
+                            style="padding:0.65rem 0.9rem; border:1px solid var(--border); border-radius:8px; background:var(--bg-secondary); color:var(--text-primary); font-size:0.9rem; font-family:inherit; outline:none; transition:border-color 0.2s; resize:vertical; width:100%; box-sizing:border-box;"
+                            onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+                        <div style="text-align:center;">
+                            <button id="submit" class="btn btn-primary" style="padding:0.75rem 2.5rem; font-size:1rem;">지금 제출!</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── 마케팅 콘텐츠 보존 (숨김, 코드 유지) ── -->
+            <div id="marketing-content" style="display:none;" aria-hidden="true">
+
+                <!-- ① 히어로 섹션 -->
+                <div class="card" style="text-align:center; padding:3.5rem 2rem 3rem; margin-bottom:1.5rem; background:linear-gradient(135deg, var(--accent-light, rgba(99,102,241,0.08)) 0%, var(--bg-secondary) 100%);">
+                    <div style="font-size:0.82rem; font-weight:600; color:var(--accent); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:1rem;">OCR 기반 스마트 회계 관리</div>
+                    <h1 style="font-size:clamp(1.7rem, 4vw, 2.7rem); font-weight:800; color:var(--text-primary); line-height:1.25; margin-bottom:0.85rem;">당신의 회계 담당,<br>이제 좀 쉬어도 됩니다</h1>
+                    <p style="font-size:1.05rem; color:var(--text-secondary); max-width:520px; margin:0 auto 0.6rem;">영수증 한 장 찍으면 끝 — 상호명·날짜·금액·품목을 AI가 자동으로 정리합니다</p>
+                    <p style="font-size:0.9rem; color:var(--text-secondary); max-width:460px; margin:0 auto 2.25rem;">단체 회계 입력·정리·보관, 이제 혼자 다 하지 않아도 됩니다</p>
+                </div>
+
+                <!-- ②-b 온보딩 섹션 -->
+                <div class="card" id="onboarding-section" style="margin-bottom:1.5rem; padding:2rem 1.5rem;">
+                    <div style="text-align:center; margin-bottom:1rem;">
+                        <h2 style="font-size:1.3rem; font-weight:800; color:var(--text-primary);">당신에 대해 알려주세요</h2>
+                    </div>
+                    <div style="max-width:480px; margin:0 auto;">
+                        <input id="ob-name" type="text" placeholder="이름/닉네임">
+                        <input id="ob-org" type="text" placeholder="소속 단체명">
+                        <select id="ob-type">
+                            <option value="">선택해주세요</option>
+                            <option value="대학교 동아리·학생회">대학교 동아리·학생회</option>
+                            <option value="사회단체·비영리법인">사회단체·비영리법인</option>
+                            <option value="소규모 스타트업·팀">소규모 스타트업·팀</option>
+                            <option value="지역 커뮤니티·종교단체">지역 커뮤니티·종교단체</option>
+                            <option value="기타">기타</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- ③ 문제 정의 섹션 -->
+                <div id="problem-section" style="margin-bottom:1.5rem;">
+                    <h2 style="font-size:1.2rem; font-weight:700; color:var(--text-primary); text-align:center; margin-bottom:1.25rem;">당신은 이런 상황에 있지 않나요?</h2>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" style="font-size:1.5rem;">⏱</div>
+                            <div class="stat-label" style="font-weight:700; font-size:0.95rem; margin:0.5rem 0 0.4rem;">행사 끝나고 영수증 정리할 때,<br>한숨 나오지 않나요?</div>
+                            <div style="font-size:0.82rem; color:var(--text-secondary); line-height:1.5;">모아둔 영수증을 일일이 타이핑하다 보면 한 시간이 훌쩍. 단체 규모가 클수록 이 부담은 기하급수적으로 커집니다.</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="font-size:1.5rem;">❌</div>
+                            <div class="stat-label" style="font-weight:700; font-size:0.95rem; margin:0.5rem 0 0.4rem;">숫자 하나 틀려서<br>장부 전체를 다시 뒤진 적 있나요?</div>
+                            <div style="font-size:0.82rem; color:var(--text-secondary); line-height:1.5;">오타 한 글자가 결산 마감 직전에 발견되면, 그날 야근은 예약된 것입니다. 사람이 직접 입력하는 한 오류는 피할 수 없습니다.</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="font-size:1.5rem;">📄</div>
+                            <div class="stat-label" style="font-weight:700; font-size:0.95rem; margin:0.5rem 0 0.4rem;">영수증 잃어버려서<br>정산이 꼬인 적 있나요?</div>
+                            <div style="font-size:0.82rem; color:var(--text-secondary); line-height:1.5;">감사나 보조금 정산 때 증빙 서류 하나가 없으면 전체가 흔들립니다. 종이 영수증은 언제든 분실·훼손될 수 있습니다.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ④ 솔루션 섹션 -->
+                <div class="card" style="margin-bottom:1.5rem; padding:2rem 1.5rem;">
+                    <h2 style="font-size:1.2rem; font-weight:700; color:var(--text-primary); text-align:center; margin-bottom:1.75rem;">이렇게 해결합니다</h2>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; align-items:start;">
+                        <div style="text-align:center; padding:1.25rem 1rem; border-radius:12px; background:var(--bg-secondary);">
+                            <div style="font-size:2.2rem; margin-bottom:0.75rem;">📸</div>
+                            <div style="font-weight:700; color:var(--accent); margin-bottom:0.4rem; font-size:0.95rem;">1단계 · 영수증 촬영</div>
+                            <div style="font-size:0.82rem; color:var(--text-secondary); line-height:1.5;">스마트폰으로 영수증 사진 한 장</div>
+                        </div>
+                        <div style="text-align:center; padding:0.5rem 0; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:var(--border);">→</div>
+                        <div style="text-align:center; padding:1.25rem 1rem; border-radius:12px; background:var(--bg-secondary);">
+                            <div style="font-size:2.2rem; margin-bottom:0.75rem;">🤖</div>
+                            <div style="font-weight:700; color:var(--accent); margin-bottom:0.4rem; font-size:0.95rem;">2단계 · AI 자동 분석</div>
+                            <div style="font-size:0.82rem; color:var(--text-secondary); line-height:1.5;">Gemini AI가 상호명·날짜·금액 즉시 추출</div>
+                        </div>
+                        <div style="text-align:center; padding:0.5rem 0; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:var(--border);">→</div>
+                        <div style="text-align:center; padding:1.25rem 1rem; border-radius:12px; background:var(--bg-secondary);">
+                            <div style="font-size:2.2rem; margin-bottom:0.75rem;">✅</div>
+                            <div style="font-weight:700; color:var(--accent); margin-bottom:0.4rem; font-size:0.95rem;">3단계 · 자동 정리·보관</div>
+                            <div style="font-size:0.82rem; color:var(--text-secondary); line-height:1.5;">회계 장부 자동 기입 + 이미지 1:1 매칭 보관</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ⑤ 비교 테이블 -->
+                <div class="card" style="margin-bottom:1.5rem; padding:2rem 1.5rem;">
+                    <h2 style="font-size:1.2rem; font-weight:700; color:var(--text-primary); text-align:center; margin-bottom:1.5rem;">기존 방식과 무엇이 다른가요?</h2>
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; font-size:0.875rem;">
+                            <thead><tr>
+                                <th style="padding:0.75rem 1rem; text-align:left; border-bottom:2px solid var(--border); color:var(--text-secondary); font-weight:600; width:20%;">구분</th>
+                                <th style="padding:0.75rem 1rem; text-align:left; border-bottom:2px solid var(--border); color:var(--text-secondary); font-weight:600; width:40%;">기존 방식</th>
+                                <th style="padding:0.75rem 1rem; text-align:left; border-bottom:2px solid rgba(99,102,241,0.4); color:var(--accent); font-weight:700; width:40%; background:var(--accent-light, rgba(99,102,241,0.06));">이 서비스</th>
+                            </tr></thead>
+                            <tbody>
+                                <tr><td style="padding:0.85rem 1rem; border-bottom:1px solid var(--border); font-weight:600; color:var(--text-primary);">데이터 입력</td><td style="padding:0.85rem 1rem; border-bottom:1px solid var(--border); color:var(--text-secondary);">수기 타이핑, 수십 분</td><td style="padding:0.85rem 1rem; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--accent); font-weight:600; background:var(--accent-light, rgba(99,102,241,0.04));">촬영 한 번으로 즉시 완료</td></tr>
+                                <tr><td style="padding:0.85rem 1rem; border-bottom:1px solid var(--border); font-weight:600; color:var(--text-primary);">오류 발생</td><td style="padding:0.85rem 1rem; border-bottom:1px solid var(--border); color:var(--text-secondary);">오타·분류 실수 빈발</td><td style="padding:0.85rem 1rem; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--accent); font-weight:600; background:var(--accent-light, rgba(99,102,241,0.04));">AI 자동 추출로 인적 오류 최소화</td></tr>
+                                <tr><td style="padding:0.85rem 1rem; border-bottom:1px solid var(--border); font-weight:600; color:var(--text-primary);">증빙 보관</td><td style="padding:0.85rem 1rem; border-bottom:1px solid var(--border); color:var(--text-secondary);">영수증 분실·매칭 어려움</td><td style="padding:0.85rem 1rem; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--accent); font-weight:600; background:var(--accent-light, rgba(99,102,241,0.04));">데이터와 이미지 자동 연결 보관</td></tr>
+                                <tr><td style="padding:0.85rem 1rem; font-weight:600; color:var(--text-primary);">보고 준비</td><td style="padding:0.85rem 1rem; color:var(--text-secondary);">자료 취합 번거로움</td><td style="padding:0.85rem 1rem; color:var(--accent); font-weight:600; background:var(--accent-light, rgba(99,102,241,0.04));">언제든 검색·CSV 출력 가능</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ⑥ 대상 고객군 -->
+                <div class="card" style="margin-bottom:1.5rem; padding:2rem 1.5rem;">
+                    <h2 style="font-size:1.2rem; font-weight:700; color:var(--text-primary); text-align:center; margin-bottom:0.5rem;">이런 당신이라면, ReceiptAI와 잘 맞습니다</h2>
+                    <p style="text-align:center; color:var(--text-secondary); font-size:0.875rem; margin-bottom:1.5rem;">전문 경리 없이 회계를 직접 처리하는 조직</p>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem;">
+                        <div style="padding:1.25rem; border-radius:12px; border:1px solid var(--border); text-align:center;"><div style="font-size:1.75rem; margin-bottom:0.5rem;">🎓</div><div style="font-weight:600; color:var(--text-primary); font-size:0.9rem;">대학교 동아리·학생회</div></div>
+                        <div style="padding:1.25rem; border-radius:12px; border:1px solid var(--border); text-align:center;"><div style="font-size:1.75rem; margin-bottom:0.5rem;">🤝</div><div style="font-weight:600; color:var(--text-primary); font-size:0.9rem;">사회단체·비영리법인</div></div>
+                        <div style="padding:1.25rem; border-radius:12px; border:1px solid var(--border); text-align:center;"><div style="font-size:1.75rem; margin-bottom:0.5rem;">🚀</div><div style="font-weight:600; color:var(--text-primary); font-size:0.9rem;">소규모 스타트업·팀</div></div>
+                        <div style="padding:1.25rem; border-radius:12px; border:1px solid var(--border); text-align:center;"><div style="font-size:1.75rem; margin-bottom:0.5rem;">🏘</div><div style="font-weight:600; color:var(--text-primary); font-size:0.9rem;">지역 커뮤니티·종교단체</div></div>
+                    </div>
+                </div>
+
+            </div>
+            <!-- /marketing-content -->
+
+            <!-- ── 퀴즈 JS ── -->
+            <script>
+            (function() {
+                var answers = [];
+                var completedCount = 0;
+
+                function updateQuestionLabel(q) {
+                    document.getElementById('quiz-current').textContent = q;
+                }
+
+                function updateCompletedBar(count) {
+                    var pct = Math.round(count / 5 * 100);
+                    document.getElementById('quiz-pct').textContent = pct;
+                    document.getElementById('quiz-bar').style.width = pct + '%';
+                }
+
+                window.selectAnswer = function(q, choice) {
+                    answers[q - 1] = choice;
+                    var btns = document.querySelectorAll('#question-' + q + ' .quiz-choice');
+                    btns.forEach(function(btn, i) {
+                        btn.disabled = true;
+                        if ((choice === 'A' && i === 0) || (choice === 'B' && i === 1)) {
+                            btn.style.borderColor = 'var(--accent)';
+                            btn.style.background = 'rgba(99,102,241,0.1)';
+                            btn.style.color = 'var(--accent)';
+                        }
+                    });
+                    completedCount = q;
+                    updateCompletedBar(completedCount);
+                    setTimeout(function() {
+                        if (q < 5) {
+                            document.getElementById('question-' + q).style.display = 'none';
+                            document.getElementById('question-' + (q + 1)).style.display = 'block';
+                            updateQuestionLabel(q + 1);
+                        } else {
+                            showQuizResult();
+                        }
+                    }, 280);
+                };
+
+                window.showQuizResult = function() {
+                    var aCount = answers.filter(function(a) { return a === 'A'; }).length;
+                    window._quizScore = aCount;
+                    var badge, msg, emoji;
+                    if (aCount <= 1) {
+                        emoji = '😊'; badge = '이미 효율적인 회계 관리자';
+                        msg = '이미 효율적인 회계 관리를 하고 계시네요!<br>그래도 한 번 체험해보세요.';
+                    } else if (aCount <= 3) {
+                        emoji = '👍'; badge = 'ReceiptAI가 도움될 타입';
+                        msg = 'ReceiptAI가 꽤 도움이 될 것 같아요.<br>지금 바로 사용해보세요!';
+                    } else {
+                        emoji = '🚨'; badge = 'ReceiptAI가 꼭 필요한 분';
+                        msg = '지금 바로 ReceiptAI가 필요한 상황이네요!<br>더 이상 미루지 마세요!';
+                    }
+                    document.getElementById('quiz-questions').style.display = 'none';
+                    document.getElementById('quiz-progress-wrap').style.display = 'none';
+                    document.getElementById('quiz-result').style.display = 'block';
+                    document.getElementById('quiz-result-emoji').textContent = emoji;
+                    document.getElementById('quiz-result-badge').textContent = badge;
+                    document.getElementById('quiz-result-msg').innerHTML = msg;
+                    document.getElementById('quiz-acount').textContent = 'A 선택 ' + aCount + ' / 5';
+                };
+
+                window.retakeQuiz = function() {
+                    answers = [];
+                    completedCount = 0;
+                    for (var i = 1; i <= 5; i++) {
+                        var qDiv = document.getElementById('question-' + i);
+                        qDiv.style.display = i === 1 ? 'block' : 'none';
+                        qDiv.querySelectorAll('.quiz-choice').forEach(function(btn) {
+                            btn.disabled = false;
+                            btn.style.borderColor = '';
+                            btn.style.background = '';
+                            btn.style.color = '';
+                        });
+                    }
+                    document.getElementById('quiz-questions').style.display = 'block';
+                    document.getElementById('quiz-progress-wrap').style.display = 'block';
+                    document.getElementById('quiz-result').style.display = 'none';
+                    updateQuestionLabel(1);
+                    updateCompletedBar(0);
+                };
+
+                /* 초기화: 2~5번 질문 숨기기, 진행률 0% */
+                for (var i = 2; i <= 5; i++) {
+                    document.getElementById('question-' + i).style.display = 'none';
+                }
+                updateQuestionLabel(1);
+                updateCompletedBar(0);
+            })();
+            </script>
+
+            <!-- ── 대시보드 진입 + 사용자 정보 팝업 JS ── -->
+            <script>
+            function renderBudgetWidget() {
+                var el = document.getElementById('budget-widget');
+                if (!el) return;
+
+                var now = new Date();
+                var period = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+                var plan = null;
+                try { plan = JSON.parse(localStorage.getItem('budgetPlan')); } catch(e) {}
+
+                if (!plan || plan.period !== period || !plan.categories) {
+                    el.innerHTML =
+                        '<div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem;">' +
+                            '<div>' +
+                                '<div style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); letter-spacing:0.06em; text-transform:uppercase; margin-bottom:0.35rem;">이번 달 예산</div>' +
+                                '<div style="font-size:0.9rem; color:var(--text-secondary);">이번 달 예산이 설정되지 않았습니다</div>' +
+                            '</div>' +
+                            '<a href="budget.html" style="font-size:0.85rem; font-weight:600; color:var(--accent); white-space:nowrap;">예산 설정하기 →</a>' +
+                        '</div>';
+                    return;
+                }
+
+                /* 이번 달 지출 집계 */
+                var receipts = [];
+                try { receipts = JSON.parse(localStorage.getItem('receipts')) || []; } catch(e) {}
+                var catSpent = {};
+                receipts.forEach(function(r) {
+                    var d = r.date || r['날짜'] || '';
+                    if (d.slice(0, 7) !== period) return;
+                    var cat = r.category || r['카테고리'] || '기타';
+                    var amt = parseFloat(r.amount || r['금액'] || 0);
+                    catSpent[cat] = (catSpent[cat] || 0) + amt;
+                });
+
+                var totalBudget = 0, totalSpent = 0, overCats = [];
+                Object.keys(plan.categories).forEach(function(cat) {
+                    var budget = parseFloat(plan.categories[cat]) || 0;
+                    var spent = catSpent[cat] || 0;
+                    totalBudget += budget;
+                    totalSpent += spent;
+                    if (budget > 0 && spent > budget) overCats.push(cat);
+                });
+
+                var pct = totalBudget > 0 ? Math.min(Math.round(totalSpent / totalBudget * 100), 100) : 0;
+                var rawPct = totalBudget > 0 ? (totalSpent / totalBudget * 100) : 0;
+                var barColor = rawPct >= 100 ? '#ef4444' : rawPct >= 90 ? '#f59e0b' : rawPct >= 70 ? 'var(--accent)' : '#10b981';
+
+                var badgesHtml = overCats.map(function(cat) {
+                    return '<span style="display:inline-flex; align-items:center; gap:0.25rem; font-size:0.75rem; font-weight:600; color:#dc2626; background:rgba(239,68,68,0.1); padding:0.2rem 0.55rem; border-radius:20px; white-space:nowrap;">⚠ ' + cat + ' 예산 초과</span>';
+                }).join(' ');
+
+                el.innerHTML =
+                    '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:0.5rem; margin-bottom:0.8rem;">' +
+                        '<div style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); letter-spacing:0.06em; text-transform:uppercase;">이번 달 예산 현황</div>' +
+                        '<a href="budget.html" style="font-size:0.82rem; font-weight:600; color:var(--accent); white-space:nowrap; flex-shrink:0;">예산 상세 보기 →</a>' +
+                    '</div>' +
+                    '<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.45rem;">' +
+                        '<span style="font-size:0.85rem; color:var(--text-secondary);">' +
+                            totalSpent.toLocaleString() + '원 <span style="color:var(--text-secondary); opacity:0.6;">/ ' + totalBudget.toLocaleString() + '원</span>' +
+                        '</span>' +
+                        '<span style="font-size:0.85rem; font-weight:700; color:' + barColor + ';">' + pct + '%</span>' +
+                    '</div>' +
+                    '<div style="height:8px; border-radius:99px; background:var(--border); overflow:hidden;">' +
+                        '<div style="height:100%; width:' + pct + '%; background:' + barColor + '; border-radius:99px; transition:width 0.4s;"></div>' +
+                    '</div>' +
+                    (badgesHtml ? '<div style="margin-top:0.75rem; display:flex; flex-wrap:wrap; gap:0.4rem;">' + badgesHtml + '</div>' : '');
+            }
+
+            function showDashboardView() {
+                document.getElementById('quiz-view').style.display = 'none';
+                document.getElementById('dashboard-view').style.display = 'block';
+                try {
+                    var profile = JSON.parse(localStorage.getItem('userProfile'));
+                    if (profile && profile.name) {
+                        document.getElementById('dashboard-username-text').textContent = ', ' + profile.name;
+                    }
+                } catch(e) {}
+                renderBudgetWidget();
+            }
+
+            window.enterDashboard = function() {
+                var score = window._quizScore || 0;
+                localStorage.setItem('quizCompleted', 'true');
+                localStorage.setItem('quizScore', String(score));
+                showDashboardView();
+                if (!localStorage.getItem('userProfile')) {
+                    openProfileModal();
+                }
+                /* 신규 방문자에게 서비스 소개 자동 노출 후 3초 뒤 접힘 */
+                var body = document.getElementById('service-info-body');
+                var arrow = document.getElementById('service-info-arrow');
+                body.style.display = 'block';
+                arrow.style.transform = 'rotate(180deg)';
+                setTimeout(function() {
+                    body.style.display = 'none';
+                    arrow.style.transform = '';
+                }, 3000);
+            };
+
+            window.openProfileModal = function() {
+                document.getElementById('profile-modal-backdrop').classList.add('open');
+            };
+
+            window.closeProfileModal = function() {
+                document.getElementById('profile-modal-backdrop').classList.remove('open');
+            };
+
+            window.handleModalBackdropClick = function(e) {
+                if (e.target === document.getElementById('profile-modal-backdrop')) {
+                    closeProfileModal();
+                }
+            };
+
+            window.saveProfileModal = function() {
+                var profile = {
+                    name: document.getElementById('pm-name').value.trim(),
+                    organization: document.getElementById('pm-org').value.trim(),
+                    orgType: document.getElementById('pm-type').value,
+                    quizScore: parseInt(localStorage.getItem('quizScore') || '0', 10),
+                    onboardedAt: new Date().toISOString()
+                };
+                localStorage.setItem('userProfile', JSON.stringify(profile));
+                if (profile.name) {
+                    document.getElementById('dashboard-username-text').textContent = ', ' + profile.name;
+                }
+                closeProfileModal();
+            };
+
+            window.toggleServiceInfo = function(btn) {
+                var body = document.getElementById('service-info-body');
+                var arrow = document.getElementById('service-info-arrow');
+                var isOpen = body.style.display !== 'none';
+                body.style.display = isOpen ? 'none' : 'block';
+                arrow.style.transform = isOpen ? '' : 'rotate(180deg)';
+            };
+
+            /* 페이지 로드: quizCompleted이면 바로 대시보드 표시 */
+            document.addEventListener('DOMContentLoaded', function() {
+                if (localStorage.getItem('quizCompleted') === 'true') {
+                    showDashboardView();
+                }
+            });
+            </script>
+
+        </main>
+
+        <!-- 사용자 정보 입력 팝업 모달 -->
+        <div id="profile-modal-backdrop" onclick="handleModalBackdropClick(event)">
+            <div style="background:var(--bg-card, var(--card-bg, #fff)); border-radius:16px; padding:1.75rem 1.5rem; max-width:440px; width:100%; position:relative; max-height:90vh; overflow-y:auto;">
+                <h3 style="font-size:1.15rem; font-weight:800; color:var(--text-primary); margin:0 0 0.5rem;">당신에 대해 알려주세요</h3>
+                <p style="font-size:0.875rem; color:var(--text-secondary); margin:0 0 1.5rem; line-height:1.55;">입력하신 정보는 영수증 등록 시 자동으로 채워지고, 설정에서 언제든 수정할 수 있습니다</p>
+                <div style="display:flex; flex-direction:column; gap:0.9rem;">
+                    <div>
+                        <label style="display:block; font-size:0.82rem; font-weight:500; color:var(--text-secondary); margin-bottom:0.3rem;">이름/닉네임</label>
+                        <input id="pm-name" type="text" placeholder="영수증 작성자 이름"
+                            style="width:100%; padding:0.65rem 0.9rem; border:1px solid var(--border); border-radius:8px; background:var(--bg-secondary); color:var(--text-primary); font-size:0.9rem; font-family:inherit; outline:none; transition:border-color 0.2s; box-sizing:border-box;"
+                            onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.82rem; font-weight:500; color:var(--text-secondary); margin-bottom:0.3rem;">소속 단체명 <span style="font-weight:400;">(선택)</span></label>
+                        <input id="pm-org" type="text" placeholder="예: 연세대 컴퓨터학과 동아리"
+                            style="width:100%; padding:0.65rem 0.9rem; border:1px solid var(--border); border-radius:8px; background:var(--bg-secondary); color:var(--text-primary); font-size:0.9rem; font-family:inherit; outline:none; transition:border-color 0.2s; box-sizing:border-box;"
+                            onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.82rem; font-weight:500; color:var(--text-secondary); margin-bottom:0.3rem;">단체 유형</label>
+                        <select id="pm-type"
+                            style="width:100%; padding:0.65rem 0.9rem; border:1px solid var(--border); border-radius:8px; background:var(--bg-secondary); color:var(--text-primary); font-size:0.9rem; font-family:inherit; outline:none; transition:border-color 0.2s; box-sizing:border-box;">
+                            <option value="">선택해주세요</option>
+                            <option value="대학교 동아리·학생회">대학교 동아리·학생회</option>
+                            <option value="사회단체·비영리법인">사회단체·비영리법인</option>
+                            <option value="소규모 스타트업·팀">소규모 스타트업·팀</option>
+                            <option value="지역 커뮤니티·종교단체">지역 커뮤니티·종교단체</option>
+                            <option value="기타">기타</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:0.55rem; margin-top:0.35rem;">
+                        <button onclick="saveProfileModal()"
+                            style="padding:0.85rem; background:var(--accent); color:#fff; border:none; border-radius:10px; font-size:0.95rem; font-weight:700; cursor:pointer; transition:opacity 0.2s; width:100%;"
+                            onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+                            저장하기
+                        </button>
+                        <button onclick="closeProfileModal()"
+                            style="background:none; border:none; color:var(--text-secondary); font-size:0.875rem; cursor:pointer; padding:0.45rem; font-family:inherit;"
+                            onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text-secondary)'">
+                            나중에 하기
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>&copy; 2026 ReceiptAI - OCR 기반 스마트 회계 관리</p>
+        </footer>
+    </div>
+
+    <script src="templatemo-daynight-script.js"></script>
+
+    <script>
+    $(document).ready(function() {
+        $("#submit").on("click", function () {
+            const email = $("#submit-email").val();
+            const advice = $("#submit-advice").val();
+
+            function validateEmail(email) {
+                var re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                return re.test(email);
+            }
+
+            if (email == '' || !validateEmail(email)) {
+                alert("이메일이 유효하지 않아 알림을 드릴 수가 없습니다.");
+                return;
+            }
+
+            var finalData = JSON.stringify({
+                "id": getUVfromCookie(),
+                "email": email,
+                "advice": advice
+            });
+
+            $.ajax({
+                url: addrScript + '?action=insert&table=tab_final&data=' + encodeURIComponent(finalData),
+                dataType: 'jsonp',
+                success: function(response) {
+                    console.log(response);
+                    alert("감사합니다! 서비스가 런칭되면 알려드리겠습니다.");
+                    $('#submit-email').val('');
+                    $('#submit-advice').val('');
+                },
+                error: function(xhr) {
+                    console.log('이메일 저장 실패:', xhr);
+                    alert("저장 중 오류가 발생했습니다. 다시 시도해주세요.");
+                }
+            });
+        });
+    });
+    </script>
+
+    <!-- ===== MVT Script Block 4: visitors 테이블 insert ===== -->
+    <script>
+    var data = JSON.stringify(
+		{"id": getUVfromCookie(),   // getUVfromCookie()
+			"landingUrl":window.location.href, // window.location.href
+			"ip":ip, //ip
+			"referer":document.referrer, // document.referrer
+			"time_stamp":getTimeStamp(),     // getTimeStamp()
+			"utm":utm, // utm
+			"device":mobile}
+			);
+
+    var addrScript = APPS_SCRIPT_URL;
+
+    $(document).ready(function () {
+
+        console.log("Document Ready");
+
+        axios.get(addrScript+'?action=insert&table=visitors&data='+data)
+        .then(response => {
+                console.log(JSON.stringify(response));
+            })
+            .catch(error => {
+                if (error.response) {
+                    // 서버가 2xx 범위를 벗어난 상태 코드로 응답한 경우
+                    console.log(error.response.data);
+                    console.log(error.response.status);
+                    console.log(error.response.headers);
+                } else if (error.request) {
+                    // 요청이 전송되었지만 응답을 받지 못한 경우
+                    console.log(error.request);
+                } else {
+                    // 요청 설정 중에 오류가 발생한 경우
+                    console.log('Error', error.message);
+                }
+                console.log(error.config);
+            });
+
+    });
+
+    </script>
+</body>
+</html>

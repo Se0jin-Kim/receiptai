@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>설정 - ReceiptAI</title>
+    <script>if(localStorage.getItem("daynight-theme")==="carbon"){document.documentElement.classList.add("carbon");}</script>
+    <link rel="stylesheet" href="templatemo-daynight-style.css">
+    <!--
+
+TemplateMo 608 ReceiptAI Admin
+
+https://templatemo.com/tm-608-daynight-admin
+
+-->
+    <script src="https://code.jquery.com/jquery-latest.min.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <style>
+        /* ── Google Sheets 연결 섹션 ── */
+        .gs-status {
+            padding: 0.65rem 1rem; border-radius: 8px;
+            font-size: 0.875rem; margin-bottom: 1rem; display: none;
+        }
+        .gs-status.success { background: rgba(16,185,129,0.1); color: var(--success, #10B981); }
+        .gs-status.error   { background: rgba(239,68,68,0.08); color: var(--danger, #ef4444); }
+        .gs-status.info    { background: rgba(99,102,241,0.08); color: var(--accent); }
+
+        .column-hint {
+            background: rgba(99,102,241,0.05);
+            border: 1px solid rgba(99,102,241,0.18);
+            border-radius: 8px; padding: 0.9rem 1rem; margin: 1rem 0;
+        }
+        .column-hint .hint-label {
+            font-size: 0.8rem; font-weight: 600;
+            color: var(--text-secondary); margin-bottom: 0.4rem;
+        }
+        .column-hint code {
+            display: block; font-family: 'SFMono-Regular', Consolas, monospace;
+            font-size: 0.78rem; color: var(--accent);
+            background: var(--bg-secondary); border-radius: 6px;
+            padding: 0.45rem 0.7rem; letter-spacing: 0.02em;
+        }
+        .col-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.4rem; }
+        .col-chip {
+            font-family: 'SFMono-Regular', Consolas, monospace;
+            font-size: 0.75rem; color: var(--accent);
+            background: var(--bg-secondary); border: 1px solid rgba(99,102,241,0.2);
+            border-radius: 5px; padding: 0.22rem 0.55rem; white-space: nowrap;
+        }
+
+        details.gs-guide {
+            border: 1px solid var(--border); border-radius: 8px;
+            overflow: hidden; margin-top: 1.25rem;
+        }
+        details.gs-guide summary {
+            padding: 0.85rem 1rem; cursor: pointer;
+            font-size: 0.875rem; font-weight: 600; color: var(--text-primary);
+            background: var(--bg-secondary); list-style: none;
+            display: flex; align-items: center; gap: 0.5rem; user-select: none;
+        }
+        details.gs-guide summary::-webkit-details-marker { display: none; }
+        details.gs-guide summary .chevron {
+            margin-left: auto; color: var(--text-secondary);
+            transition: transform 0.2s; display: inline-block;
+        }
+        details.gs-guide[open] summary .chevron { transform: rotate(180deg); }
+        .guide-content { padding: 1.25rem 1rem; }
+        .guide-step { display: flex; gap: 0.85rem; margin-bottom: 1.1rem; align-items: flex-start; }
+        .guide-step:last-child { margin-bottom: 0; }
+        .step-num {
+            width: 22px; height: 22px; min-width: 22px;
+            background: var(--accent); color: #fff; border-radius: 50%;
+            font-size: 0.72rem; font-weight: 700;
+            display: flex; align-items: center; justify-content: center; margin-top: 2px;
+        }
+        .step-body { flex: 1; }
+        .step-title { font-size: 0.875rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem; }
+        .step-desc { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.55; }
+        .code-block {
+            background: var(--bg-secondary); border: 1px solid var(--border);
+            border-radius: 8px; padding: 1rem;
+            font-family: 'SFMono-Regular', Consolas, monospace;
+            font-size: 0.75rem; line-height: 1.65; color: var(--text-primary);
+            overflow-x: auto; white-space: pre; margin: 0.75rem 0 0;
+        }
+
+        .btn-disconnect {
+            background: rgba(107,114,128,0.1); color: #6B7280;
+            border: 1px solid rgba(107,114,128,0.25);
+        }
+        .btn-disconnect:hover { background: rgba(107,114,128,0.18); }
+    </style>
+    <script src="./config.js"></script>
+</head>
+<body>
+    <script>
+        var mobile = 'desktop';
+            if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+                // true for mobile device
+                mobile = 'mobile';
+            }
+
+        var queryString = location.search;
+        const urlParams = new URLSearchParams(queryString);
+        const utm = urlParams.get("utm")
+
+
+        // Sam pading value to start with 0. eg: 01, 02, .. 09, 10, ..
+        function padValue(value) {
+            return (value < 10) ? "0" + value : value;
+        }
+
+        function getTimeStamp() {
+            const date = new Date();
+
+            const year = date.getFullYear();
+            const month = date.getMonth() + 1;
+            const day = date.getDate();
+            const hours = date.getHours();
+            const minutes = date.getMinutes();
+            const seconds = date.getSeconds();
+
+            const formattedDate = `${padValue(year)}-${padValue(month)}-${padValue(day)} ${padValue(hours)}:${padValue(minutes)}:${padValue(seconds)}`;
+
+            return formattedDate;
+        }
+        function getCookieValue(name) {
+                        const value = "; " + document.cookie;
+                        const parts = value.split("; " + name + "=");
+                        if (parts.length === 2) {
+                            return parts.pop().split(";").shift();
+                        }
+                    }
+
+                    // 쿠키에 값을 저장하는 함수
+                    function setCookieValue(name, value, days) {
+                        let expires = "";
+                        if (days) {
+                            const date = new Date();
+                            date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+                            expires = "; expires=" + date.toUTCString();
+                        }
+                        document.cookie = name + "=" + (value || "") + expires + "; path=/";
+                    }
+
+                    function getUVfromCookie() {
+                        // 6자리 임의의 문자열 생성
+                        const hash = Math.random().toString(36).substring(2, 8).toUpperCase();
+                        // 쿠키에서 기존 해시 값을 가져옴
+                        const existingHash = getCookieValue("user");
+                        // 기존 해시 값이 없으면, 새로운 해시 값을 쿠키에 저장
+                        if (!existingHash) {
+                            setCookieValue("user", hash, 180); // 쿠키 만료일은 6개월
+                            return hash;
+                        } else {
+                            // 기존 해시 값이 있으면, 기존 값을 반환
+                            return existingHash;
+                        }
+                    }
+
+                    /* 수정 payload data -> id:getUVfromCookie() */
+    </script>
+
+    <script type="application/javascript">
+					var ip = "null";
+					function getIP(json) {
+					    console.log(json);
+					    try {
+							ip = json.ip;
+					    } catch (e) {
+							ip = 'unknown';
+					    }
+					    return;
+					}
+					</script>
+					<script type="application/javascript" src="https://jsonip.com?format=jsonp&callback=getIP"></script>
+
+    <!-- Mobile Menu Overlay -->
+    <div class="mobile-menu-overlay"></div>
+    
+    <!-- Mobile Menu -->
+    <div class="mobile-menu">
+        <div class="mobile-menu-header">
+            <a href="index.html" class="logo">
+                <div class="logo-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg></div>
+                ReceiptAI
+            </a>
+            <button class="mobile-menu-close" onclick="closeMobileMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <nav class="mobile-menu-nav">
+            <a href="index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>홈</a>
+            <a href="receipts.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>Receipts</a>
+            <a href="analytics-receipts.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Analytics</a>
+            <a href="report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>리포트</a>
+            <a href="budget.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><polyline points="2 10 22 10"/><circle cx="17" cy="15" r="1" fill="currentColor" stroke="none"/></svg>예산 관리</a>
+            <a href="settings.html" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+        </nav>
+        <div class="mobile-menu-footer"><a href="login.html" class="mobile-logout-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Logout</a>
+            <div class="theme-toggle">
+                <button class="theme-btn theme-btn-snow active" onclick="setTheme('snow')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button>
+                <button class="theme-btn theme-btn-carbon" onclick="setTheme('carbon')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Top Navigation -->
+        <nav class="top-nav">
+            <div class="nav-container">
+                <div class="nav-left">
+                    <a href="index.html" class="logo"><div class="logo-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg></div>ReceiptAI</a>
+                    <div class="nav-menu">
+                        <div class="nav-item"><a href="index.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>홈</a></div>
+                        <div class="nav-item"><a href="receipts.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>Receipts</a></div>
+                        <div class="nav-item"><a href="analytics-receipts.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Analytics</a></div>
+                        <div class="nav-item"><a href="report.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>리포트</a></div>
+                        <div class="nav-item"><a href="budget.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><polyline points="2 10 22 10"/><circle cx="17" cy="15" r="1" fill="currentColor" stroke="none"/></svg>예산 관리</a></div>
+                        <div class="nav-item"><a href="settings.html" class="nav-link active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a></div>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="theme-toggle">
+                        <button class="theme-btn theme-btn-snow active" onclick="setTheme('snow')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button>
+                        <button class="theme-btn theme-btn-carbon" onclick="setTheme('carbon')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+                    </div>
+                    <button class="user-menu"><div class="user-avatar">A</div><span class="user-name">Alex</span></button><a href="login.html" class="btn-logout" title="Logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
+                    <button class="mobile-menu-btn" onclick="toggleMobileMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="page-header">
+                <h1 class="greeting">Settings</h1>
+                <p class="greeting-sub">Manage your account and preferences</p>
+            </div>
+
+            <!-- ★ 내 정보 -->
+            <section class="settings-section" style="margin-bottom:1.5rem;">
+                <div class="card">
+                    <h2 class="settings-title">내 정보</h2>
+                    <p class="settings-desc">입력하신 정보는 영수증 등록 시 작성자 필드에 자동으로 채워지고, 언제든 수정할 수 있습니다.</p>
+
+                    <div id="profile-status" class="gs-status"></div>
+                    <div id="profile-no-data" style="display:none; padding:0.65rem 1rem; border-radius:8px; background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.15); font-size:0.875rem; color:var(--text-secondary); margin-bottom:1rem;">
+                        아직 입력한 정보가 없습니다. 아래에 입력하고 저장해주세요.
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:0.85rem;">
+                        <label class="form-label">이름/닉네임</label>
+                        <input type="text" id="profile-name" class="form-input" placeholder="영수증 작성자 이름">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0.85rem;">
+                        <label class="form-label">소속 단체명 <span style="font-weight:400;">(선택)</span></label>
+                        <input type="text" id="profile-org" class="form-input" placeholder="예: 연세대 컴퓨터학과 동아리">
+                    </div>
+                    <div class="form-group" style="margin-bottom:1.1rem;">
+                        <label class="form-label">단체 유형</label>
+                        <select id="profile-org-type" class="form-input">
+                            <option value="">선택해주세요</option>
+                            <option value="대학교 동아리·학생회">대학교 동아리·학생회</option>
+                            <option value="사회단체·비영리법인">사회단체·비영리법인</option>
+                            <option value="소규모 스타트업·팀">소규모 스타트업·팀</option>
+                            <option value="지역 커뮤니티·종교단체">지역 커뮤니티·종교단체</option>
+                            <option value="기타">기타</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="saveProfile()">저장</button>
+                </div>
+            </section>
+
+            <!-- ★ 내 Google Sheets 연결 -->
+            <section class="settings-section" style="margin-bottom:1.5rem;">
+                <div class="card">
+                    <h2 class="settings-title">내 Google Sheets 연결</h2>
+                    <p class="settings-desc">본인의 Google Apps Script 웹앱 URL을 입력하면 영수증 데이터가 내 Google Sheets에 저장됩니다. 비워두면 기본 저장소(localStorage)만 사용됩니다.</p>
+
+                    <div id="gs-status" class="gs-status"></div>
+
+                    <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.3); border-radius:8px; padding:0.85rem 1rem; margin-bottom:1.1rem;">
+                        <div style="display:flex; align-items:center; gap:0.4rem; font-size:0.82rem; font-weight:600; color:var(--warning,#F59E0B); margin-bottom:0.5rem;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                            주의사항
+                        </div>
+                        <ul style="margin:0; padding-left:1.1rem; font-size:0.8rem; color:var(--text-secondary); line-height:1.7;">
+                            <li>학교/회사 계정(Google Workspace)으로 만든 Google Sheets는 도메인 보안 정책으로 인해 연결이 제한될 수 있습니다.</li>
+                            <li><strong style="color:var(--text-primary);">개인 Gmail 계정</strong>으로 새 Google Sheets를 만들어 사용해주세요.</li>
+                            <li>배포 시 <strong style="color:var(--text-primary);">"실행: 나" / "액세스 권한: 모든 사용자"</strong>로 설정했는지 확인해주세요.</li>
+                        </ul>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:0.85rem;">
+                        <label class="form-label">Apps Script 웹앱 URL</label>
+                        <input type="url" id="user-script-url" class="form-input"
+                            placeholder="https://script.google.com/macros/s/.../exec"
+                            autocomplete="off" spellcheck="false">
+                    </div>
+
+                    <div style="display:flex; gap:0.65rem; flex-wrap:wrap; margin-bottom:1.1rem;">
+                        <button class="btn btn-primary" onclick="saveScriptUrl()">저장</button>
+                        <button class="btn btn-secondary" onclick="testScriptUrl()">연결 테스트</button>
+                        <button class="btn btn-disconnect" onclick="disconnectScriptUrl()">연결 해제</button>
+                    </div>
+
+                    <div class="column-hint">
+                        <div class="hint-label">Google Sheets 준비 방법</div>
+                        <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.35rem;">
+                            Google Sheets에 <strong style="color:var(--text-primary);">receipts</strong> 탭을 만들고 1행에 아래 컬럼을 순서대로 입력하세요.
+                        </div>
+                        <div class="col-chips">
+                            <span class="col-chip">id</span>
+                            <span class="col-chip">date</span>
+                            <span class="col-chip">store_name</span>
+                            <span class="col-chip">amount</span>
+                            <span class="col-chip">category</span>
+                            <span class="col-chip">payment_method</span>
+                            <span class="col-chip">memo</span>
+                            <span class="col-chip">created_at</span>
+                            <span class="col-chip">items</span>
+                            <span class="col-chip">author</span>
+                        </div>
+                    </div>
+
+                    <details class="gs-guide">
+                        <summary>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            내 Google Sheets 설정 방법 (단계별 안내)
+                            <span class="chevron">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="6 9 12 15 18 9"/></svg>
+                            </span>
+                        </summary>
+                        <div class="guide-content">
+                            <div class="guide-step">
+                                <div class="step-num">1</div>
+                                <div class="step-body">
+                                    <div class="step-title">Google Sheets 새로 만들기</div>
+                                    <div class="step-desc">sheets.google.com에서 새 스프레드시트를 만들고, 하단 탭 이름을 <strong>receipts</strong>로 변경합니다. 1행에 아래 컬럼을 순서대로 입력하세요.
+                                        <div class="col-chips" style="margin-top:0.5rem;">
+                                            <span class="col-chip">id</span>
+                                            <span class="col-chip">date</span>
+                                            <span class="col-chip">store_name</span>
+                                            <span class="col-chip">amount</span>
+                                            <span class="col-chip">category</span>
+                                            <span class="col-chip">payment_method</span>
+                                            <span class="col-chip">memo</span>
+                                            <span class="col-chip">created_at</span>
+                                            <span class="col-chip">items</span>
+                                            <span class="col-chip">author</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="guide-step">
+                                <div class="step-num">2</div>
+                                <div class="step-body">
+                                    <div class="step-title">Apps Script 열기</div>
+                                    <div class="step-desc">상단 메뉴 <strong>확장 프로그램 &gt; Apps Script</strong>를 클릭합니다. 새 탭에 스크립트 편집기가 열립니다.</div>
+                                </div>
+                            </div>
+                            <div class="guide-step">
+                                <div class="step-num">3</div>
+                                <div class="step-body">
+                                    <div class="step-title">아래 코드를 붙여넣기</div>
+                                    <div class="step-desc">편집기의 기존 내용을 모두 지우고 아래 코드를 붙여넣습니다.<br>
+                                    <span style="color:var(--accent);font-weight:600;">💡</span> Sheets 1행 헤더를 기준으로 자동 매핑됩니다. <strong style="color:var(--text-primary);">컬럼을 추가해도 코드 수정 없이 자동 인식됩니다.</strong></div>
+                                    <div class="code-block">function doGet(e) {
+  var p = e.parameter;
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(p.table);
+  var result;
+
+  if (!sheet) {
+    result = { status: 'error', message: 'Sheet not found: ' + p.table };
+  } else if (p.action === 'insert') {
+    var data = JSON.parse(p.data);
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    sheet.appendRow(headers.map(function(h) {
+      return data[h] !== undefined ? data[h] : '';
+    }));
+    result = { status: 'ok' };
+  } else if (p.action === 'read') {
+    var values = sheet.getDataRange().getValues();
+    var headers = values[0];
+    result = {
+      status: 'ok',
+      data: values.slice(1).map(function(row) {
+        var obj = {};
+        headers.forEach(function(h, i) { obj[h] = row[i]; });
+        return obj;
+      })
+    };
+  } else if (p.action === 'delete') {
+    var values = sheet.getDataRange().getValues();
+    var targetId = p.id;
+    var deleted = false;
+    for (var i = 1; i < values.length; i++) {
+      if (String(values[i][0]) === String(targetId)) {
+        sheet.deleteRow(i + 1);
+        deleted = true;
+        break;
+      }
+    }
+    result = deleted
+      ? { status: 'ok', message: 'deleted' }
+      : { status: 'error', message: 'id not found' };
+  } else {
+    result = { status: 'error', message: 'unknown action' };
+  }
+
+  return ContentService
+    .createTextOutput(p.callback + '(' + JSON.stringify(result) + ')')
+    .setMimeType(ContentService.MimeType.JAVASCRIPT);
+}</div>
+                                    <div style="margin-top:0.75rem; padding:0.75rem 1rem; background:rgba(245,158,11,0.08); border-radius:8px; border-left:3px solid #f59e0b; font-size:0.82rem; color:var(--text-secondary); line-height:1.7;">
+                                        <strong style="color:var(--text-primary);">⚠ 코드 수정 후 반드시 새 버전으로 재배포해야 합니다.</strong><br>
+                                        배포 &gt; 배포 관리 &gt; 연필 아이콘 클릭 &gt; 버전: <strong>새 버전</strong> 선택 &gt; 배포.<br>
+                                        기존 배포를 그냥 저장하면 변경사항이 반영되지 않습니다.
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="guide-step">
+                                <div class="step-num">4</div>
+                                <div class="step-body">
+                                    <div class="step-title">저장 및 웹앱으로 배포</div>
+                                    <div class="step-desc"><strong>Ctrl+S</strong>로 저장 후 우측 상단 <strong>배포 &gt; 새 배포</strong>를 클릭합니다.<br>유형: <strong>웹 앱</strong> · 실행: <strong>나(본인 Gmail)</strong> · 액세스: <strong>모든 사용자(익명 포함)</strong>로 설정 후 <strong>배포</strong>. 권한 승인 팝업이 뜨면 허용합니다.</div>
+                                </div>
+                            </div>
+                            <div class="guide-step">
+                                <div class="step-num">5</div>
+                                <div class="step-body">
+                                    <div class="step-title">URL 복사 후 입력</div>
+                                    <div class="step-desc">배포 완료 후 표시된 <strong>웹앱 URL</strong>(<code style="font-family:monospace;font-size:0.75rem;">https://script.google.com/macros/s/.../exec</code>)을 복사하여 위 입력창에 붙여넣고 <strong>저장</strong> 후 <strong>연결 테스트</strong>를 눌러 확인합니다.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </section>
+
+            <!-- Two Column Settings Layout -->
+            <div class="settings-grid">
+                <!-- Left Column: Account & Appearance -->
+                <div>
+                    <section class="settings-section">
+                        <div class="card">
+                            <h2 class="settings-title">Account Information</h2>
+                            <p class="settings-desc">Update your personal information</p>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                                <div class="form-group" style="margin-bottom: 0;"><label class="form-label">First Name</label><input type="text" class="form-input" value="Alex"></div>
+                                <div class="form-group" style="margin-bottom: 0;"><label class="form-label">Last Name</label><input type="text" class="form-input" value="Johnson"></div>
+                            </div>
+                            <div class="form-group"><label class="form-label">Email Address</label><input type="email" class="form-input" value="alex.johnson@company.com"></div>
+                            <div class="form-group"><label class="form-label">Job Title</label><input type="text" class="form-input" value="Product Manager"></div>
+                            <div class="form-group" style="margin-bottom: 0;"><label class="form-label">Bio</label><textarea class="form-input" style="min-height: 80px; resize: vertical;">Product manager with 5+ years of experience in SaaS.</textarea></div>
+                            <div style="margin-top: 1.25rem;"><button class="btn btn-primary">Save Changes</button></div>
+                        </div>
+                    </section>
+
+                    <section class="settings-section">
+                        <div class="card">
+                            <h2 class="settings-title">Appearance</h2>
+                            <p class="settings-desc">Customize how the dashboard looks</p>
+                            <div class="settings-row">
+                                <div class="settings-row-info"><div class="settings-row-label">Theme Mode</div><div class="settings-row-desc">Snow (light) or Carbon (dark)</div></div>
+                                <div class="theme-toggle">
+                                    <button class="theme-btn theme-btn-snow active" onclick="setTheme('snow')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button>
+                                    <button class="theme-btn theme-btn-carbon" onclick="setTheme('carbon')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+                                </div>
+                            </div>
+                            <div class="settings-row"><div class="settings-row-info"><div class="settings-row-label">Compact Mode</div><div class="settings-row-desc">Reduce spacing throughout</div></div><label class="toggle"><input type="checkbox" id="compact-mode"><span class="toggle-slider"></span></label></div>
+                            <div class="settings-row"><div class="settings-row-info"><div class="settings-row-label">Show Animations</div><div class="settings-row-desc">Enable smooth transitions</div></div><label class="toggle"><input type="checkbox" id="animations" checked><span class="toggle-slider"></span></label></div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Right Column: Notifications & Security -->
+                <div>
+                    <section class="settings-section">
+                        <div class="card">
+                            <h2 class="settings-title">Notifications</h2>
+                            <p class="settings-desc">Choose what notifications you receive</p>
+                            <div class="settings-row"><div class="settings-row-info"><div class="settings-row-label">Email Notifications</div><div class="settings-row-desc">Receive updates via email</div></div><label class="toggle"><input type="checkbox" id="email-notif" checked><span class="toggle-slider"></span></label></div>
+                            <div class="settings-row"><div class="settings-row-info"><div class="settings-row-label">Push Notifications</div><div class="settings-row-desc">Real-time browser alerts</div></div><label class="toggle"><input type="checkbox" id="push-notif" checked><span class="toggle-slider"></span></label></div>
+                            <div class="settings-row"><div class="settings-row-info"><div class="settings-row-label">Project Updates</div><div class="settings-row-desc">When projects are updated</div></div><label class="toggle"><input type="checkbox" id="project-notif" checked><span class="toggle-slider"></span></label></div>
+                            <div class="settings-row"><div class="settings-row-info"><div class="settings-row-label">Team Mentions</div><div class="settings-row-desc">When someone mentions you</div></div><label class="toggle"><input type="checkbox" id="mention-notif" checked><span class="toggle-slider"></span></label></div>
+                            <div class="settings-row"><div class="settings-row-info"><div class="settings-row-label">Weekly Digest</div><div class="settings-row-desc">Weekly activity summary</div></div><label class="toggle"><input type="checkbox" id="digest-notif"><span class="toggle-slider"></span></label></div>
+                        </div>
+                    </section>
+
+                    <section class="settings-section">
+                        <div class="card">
+                            <h2 class="settings-title">Security</h2>
+                            <p class="settings-desc">Manage account security</p>
+                            <div class="settings-row"><div class="settings-row-info"><div class="settings-row-label">Two-Factor Authentication</div><div class="settings-row-desc">Extra layer of security</div></div><label class="toggle"><input type="checkbox" id="two-factor"><span class="toggle-slider"></span></label></div>
+                            <div class="settings-row"><div class="settings-row-info"><div class="settings-row-label">Login Alerts</div><div class="settings-row-desc">Notified of new logins</div></div><label class="toggle"><input type="checkbox" id="login-alerts" checked><span class="toggle-slider"></span></label></div>
+                            <div class="settings-row"><div class="settings-row-info"><div class="settings-row-label">Session Timeout</div><div class="settings-row-desc">Auto logout after inactivity</div></div><select class="form-input" style="width: auto; min-width: 130px;"><option>15 minutes</option><option selected>30 minutes</option><option>1 hour</option><option>Never</option></select></div>
+                            <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+                                <h3 style="font-size: 0.9375rem; font-weight: 600; color: var(--text-primary); margin-bottom: 1rem;">Change Password</h3>
+                                <div class="form-group"><label class="form-label">Current Password</label><input type="password" class="form-input" placeholder="Current password"></div>
+                                <div class="form-group"><label class="form-label">New Password</label><input type="password" class="form-input" placeholder="New password"></div>
+                                <button class="btn btn-primary">Update Password</button>
+                            </div>
+                            <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+                                <h3 style="font-size: 0.9375rem; font-weight: 600; color: var(--danger); margin-bottom: 0.5rem;">Danger Zone</h3>
+                                <button class="btn" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid var(--danger);">Delete Account</button>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer"><p>&copy; 2026 ReceiptAI - OCR 기반 스마트 회계 관리</p></footer>
+    </div>
+    <script src="templatemo-daynight-script.js"></script>
+
+    <script>
+    /* ── Google Sheets 연결 설정 ── */
+    const USER_SCRIPT_KEY = 'userAppsScriptUrl';
+
+    function loadScriptUrl() {
+        const saved = localStorage.getItem(USER_SCRIPT_KEY);
+        if (saved) {
+            document.getElementById('user-script-url').value = saved;
+            showGsStatus('저장된 URL이 있습니다. 연결 테스트 버튼으로 연결 상태를 확인하세요.', 'info');
+        }
+    }
+
+    function saveScriptUrl() {
+        const url = document.getElementById('user-script-url').value.trim();
+        if (!url) { showGsStatus('URL을 입력해주세요.', 'error'); return; }
+        if (!url.startsWith('https://script.google.com/')) {
+            showGsStatus('올바른 Google Apps Script URL이 아닙니다. (https://script.google.com/macros/s/.../exec 형식)', 'error');
+            return;
+        }
+        localStorage.setItem(USER_SCRIPT_KEY, url);
+        showGsStatus('✅ URL이 저장되었습니다. 연결 테스트를 눌러 확인해보세요.', 'success');
+    }
+
+    function testScriptUrl() {
+        const url = document.getElementById('user-script-url').value.trim();
+        if (!url) { showGsStatus('먼저 URL을 입력하고 저장해주세요.', 'error'); return; }
+        showGsStatus('⏳ 연결 테스트 중...', 'info');
+        $.ajax({
+            url: url + '?action=read&table=receipts',
+            dataType: 'jsonp',
+            timeout: 10000,
+            success: function() {
+                showGsStatus('✅ 연결 성공! Apps Script가 정상 응답했습니다.', 'success');
+            },
+            error: function() {
+                showGsStatus('❌ 연결 실패. URL을 확인하거나 Apps Script를 다시 배포해주세요.', 'error');
+            }
+        });
+    }
+
+    function disconnectScriptUrl() {
+        if (!confirm('저장된 Apps Script URL을 삭제하시겠습니까?\n이후 영수증 데이터는 localStorage에만 저장됩니다.')) return;
+        localStorage.removeItem(USER_SCRIPT_KEY);
+        document.getElementById('user-script-url').value = '';
+        showGsStatus('연결이 해제되었습니다. 앞으로 localStorage만 사용합니다.', 'info');
+    }
+
+    function showGsStatus(msg, type) {
+        const el = document.getElementById('gs-status');
+        el.textContent = msg;
+        el.className = 'gs-status ' + type;
+        el.style.display = 'block';
+    }
+
+    document.addEventListener('DOMContentLoaded', loadScriptUrl);
+    </script>
+
+    <script>
+    /* ── 내 정보 관리 ── */
+    function loadProfile() {
+        try {
+            var profile = JSON.parse(localStorage.getItem('userProfile'));
+            if (profile) {
+                document.getElementById('profile-name').value = profile.name || '';
+                document.getElementById('profile-org').value = profile.organization || '';
+                document.getElementById('profile-org-type').value = profile.orgType || '';
+                document.getElementById('profile-no-data').style.display = 'none';
+            } else {
+                document.getElementById('profile-no-data').style.display = 'block';
+            }
+        } catch(e) {}
+    }
+
+    function saveProfile() {
+        var existing = {};
+        try { existing = JSON.parse(localStorage.getItem('userProfile')) || {}; } catch(e) {}
+        var updated = Object.assign({}, existing, {
+            name: document.getElementById('profile-name').value.trim(),
+            organization: document.getElementById('profile-org').value.trim(),
+            orgType: document.getElementById('profile-org-type').value
+        });
+        localStorage.setItem('userProfile', JSON.stringify(updated));
+        document.getElementById('profile-no-data').style.display = 'none';
+        var el = document.getElementById('profile-status');
+        el.textContent = '✅ 내 정보가 저장되었습니다.';
+        el.className = 'gs-status success';
+        el.style.display = 'block';
+        setTimeout(function() { el.style.display = 'none'; }, 3000);
+    }
+
+    document.addEventListener('DOMContentLoaded', loadProfile);
+    </script>
+
+    <script>
+    var data = JSON.stringify(
+		{"id": getUVfromCookie(),   // getUVfromCookie()
+			"landingUrl":window.location.href, // window.location.href
+			"ip":ip, //ip
+			"referer":document.referrer, // document.referrer
+			"time_stamp":getTimeStamp(),     // getTimeStamp()
+			"utm":utm, // utm
+			"device":mobile}
+			);
+
+    var addrScript = APPS_SCRIPT_URL;
+
+    $(document).ready(function () {
+
+        console.log("Document Ready");
+
+        axios.get(addrScript+'?action=insert&table=visitors&data='+data)
+        .then(response => {
+                console.log(JSON.stringify(response));
+            })
+            .catch(error => {
+                if (error.response) {
+                    // 서버가 2xx 범위를 벗어난 상태 코드로 응답한 경우
+                    console.log(error.response.data);
+                    console.log(error.response.status);
+                    console.log(error.response.headers);
+                } else if (error.request) {
+                    // 요청이 전송되었지만 응답을 받지 못한 경우
+                    console.log(error.request);
+                } else {
+                    // 요청 설정 중에 오류가 발생한 경우
+                    console.log('Error', error.message);
+                }
+                console.log(error.config);
+            });
+
+    });
+
+    </script>
+</body>
+</html>

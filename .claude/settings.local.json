@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"userAppsScriptUrl\\\\|appsScriptUrl\\\\|APPS_SCRIPT_URL\\\\|$.ajax\\\\|dataType.*jsonp\\\\|jsonp\" \"/Users/kimseojin/Desktop/ocr 영수증/receipts.html\")",
+      "Bash(grep -n \"getMerged\\\\|localData\\\\|sheetsData\\\\|loadReceipts\\\\|localStorage.*receipts\\\\|jsonp\\\\|$.ajax\\\\|appsScriptUrl\\\\|APPS_SCRIPT_URL\" \"/Users/kimseojin/Desktop/ocr 영수증/analytics-receipts.html\")",
+      "Bash(grep -n \"getMerged\\\\|loadData\\\\|localStorage.*receipts\\\\|jsonp\\\\|$.ajax\\\\|appsScriptUrl\\\\|APPS_SCRIPT_URL\\\\|allReceipts\\\\|sheetsData\" \"/Users/kimseojin/Desktop/ocr 영수증/report.html\")"
+    ]
+  }
+}

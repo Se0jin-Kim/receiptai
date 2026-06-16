@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>리포트 - ReceiptAI</title>
+    <script>if(localStorage.getItem('daynight-theme')==='carbon'){document.documentElement.classList.add('carbon');}</script>
+    <script src="https://code.jquery.com/jquery-latest.min.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="./config.js"></script>
+    <link rel="stylesheet" href="templatemo-daynight-style.css">
+    <style>
+        /* ── 로딩 ── */
+        .loading-wrap { text-align:center; padding:4rem 1rem; color:var(--text-secondary); }
+        .spinner { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.75s linear infinite; margin:0 auto 1rem; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+
+        /* ── 빈 상태 / 에러 ── */
+        .empty-state { text-align:center; padding:4rem 1rem; color:var(--text-secondary); }
+        .empty-state svg { width:52px; height:52px; margin-bottom:1rem; opacity:0.35; }
+        .error-banner { display:none; padding:0.75rem 1rem; border-radius:8px; background:rgba(239,68,68,0.08); color:#ef4444; font-size:0.875rem; margin-bottom:1.25rem; }
+
+        /* ── 기간 선택 ── */
+        .period-row { display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; }
+        .period-row label { font-size:0.875rem; font-weight:500; color:var(--text-secondary); white-space:nowrap; }
+        #month-select {
+            padding:0.45rem 0.75rem; border:1px solid var(--border); border-radius:8px;
+            background:var(--bg-secondary); color:var(--text-primary);
+            font-size:0.875rem; font-family:inherit; outline:none; cursor:pointer;
+            transition:border-color 0.2s;
+        }
+        #month-select:focus { border-color:var(--accent); }
+
+        /* ── 요약 카드 ── */
+        .summary-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:1rem; margin-bottom:1.5rem; }
+        .summary-card { background:var(--bg-card,var(--card-bg)); border:1px solid var(--border); border-radius:12px; padding:1.1rem 1.25rem; }
+        .s-label { font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.35rem; }
+        .s-value { font-size:1.25rem; font-weight:700; color:var(--text-primary); }
+        .s-value.accent { color:var(--accent); }
+        .s-sub { font-size:0.75rem; color:var(--text-secondary); margin-top:0.2rem; }
+
+        /* ── 2열 레이아웃 ── */
+        .charts-row { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-bottom:1.5rem; }
+        @media (max-width:768px) { .charts-row { grid-template-columns:1fr; } }
+
+        /* ── 도넛 차트 ── */
+        .donut-wrap { display:flex; gap:1.5rem; align-items:center; flex-wrap:wrap; }
+        .donut-svg-wrap { flex-shrink:0; }
+        .donut-legend { display:flex; flex-direction:column; gap:0.55rem; flex:1; min-width:130px; }
+        .legend-item { display:flex; align-items:center; gap:0.5rem; }
+        .legend-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+        .legend-name { font-size:0.8rem; color:var(--text-secondary); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .legend-amt { font-size:0.8rem; font-weight:600; color:var(--text-primary); white-space:nowrap; }
+        .legend-pct { font-size:0.75rem; color:var(--text-secondary); white-space:nowrap; }
+
+        /* ── 카테고리 뱃지 ── */
+        .cat-badge { display:inline-block; font-size:0.75rem; padding:0.2rem 0.6rem; border-radius:99px; font-weight:500; }
+
+        /* ── 리포트 테이블 ── */
+        .report-table { width:100%; border-collapse:collapse; font-size:0.875rem; }
+        .report-table th { font-size:0.78rem; font-weight:600; color:var(--text-secondary); text-align:left; padding:0.5rem 0.75rem; border-bottom:2px solid var(--border); }
+        .report-table td { padding:0.55rem 0.75rem; border-bottom:1px solid var(--border); color:var(--text-primary); }
+        .report-table tr:last-child td { border-bottom:none; }
+        .report-table tbody tr:hover td { background:var(--bg-secondary); }
+
+        /* ── 품목 TOP 5 ── */
+        .top-item-row { display:flex; align-items:center; gap:0.75rem; padding:0.65rem 0; border-bottom:1px solid var(--border); }
+        .top-item-row:last-child { border-bottom:none; }
+        .top-item-rank { width:22px; height:22px; min-width:22px; border-radius:50%; background:var(--accent); color:#fff; font-size:0.72rem; font-weight:700; display:flex; align-items:center; justify-content:center; }
+
+        .section-gap { margin-bottom:1.5rem; }
+
+        /* ── 인쇄 전용 ── */
+        @media print {
+            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+            .top-nav,
+            .mobile-menu,
+            .mobile-menu-overlay,
+            .footer,
+            #period-section,
+            .print-btn,
+            #error-banner,
+            #loading-wrap { display: none !important; }
+
+            body, html, .app-container, .main-content {
+                background: white !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+
+            .card {
+                border: 1px solid #ccc !important;
+                box-shadow: none !important;
+                break-inside: avoid;
+                margin-bottom: 1rem !important;
+            }
+
+            .summary-grid { grid-template-columns: repeat(4, 1fr) !important; }
+            .charts-row { grid-template-columns: 1fr 1fr !important; }
+
+            .s-value, .card-title, td, th { color: #000 !important; }
+            .s-label, .s-sub, .card-subtitle { color: #555 !important; }
+
+            .page-header { padding-bottom: 0.5rem !important; }
+
+            a { text-decoration: none !important; color: #000 !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ===== MVT Script Block 1: 헬퍼 함수 ===== -->
+    <script>
+        var mobile = 'desktop';
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+            mobile = 'mobile';
+        }
+
+        var queryString = location.search;
+        const urlParams = new URLSearchParams(queryString);
+        const utm = urlParams.get("utm");
+
+        function padValue(value) { return (value < 10) ? "0" + value : value; }
+
+        function getTimeStamp() {
+            const date = new Date();
+            const year = date.getFullYear(), month = date.getMonth() + 1, day = date.getDate();
+            const hours = date.getHours(), minutes = date.getMinutes(), seconds = date.getSeconds();
+            return `${padValue(year)}-${padValue(month)}-${padValue(day)} ${padValue(hours)}:${padValue(minutes)}:${padValue(seconds)}`;
+        }
+
+        function getCookieValue(name) {
+            const value = "; " + document.cookie;
+            const parts = value.split("; " + name + "=");
+            if (parts.length === 2) return parts.pop().split(";").shift();
+        }
+
+        function setCookieValue(name, value, days) {
+            let expires = "";
+            if (days) {
+                const date = new Date();
+                date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+                expires = "; expires=" + date.toUTCString();
+            }
+            document.cookie = name + "=" + (value || "") + expires + "; path=/";
+        }
+
+        function getUVfromCookie() {
+            const hash = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const existingHash = getCookieValue("user");
+            if (!existingHash) { setCookieValue("user", hash, 180); return hash; }
+            return existingHash;
+        }
+    </script>
+
+    <!-- ===== MVT Script Block 2: IP 수집 (JSONP) ===== -->
+    <script type="application/javascript">
+        var ip = "null";
+        function getIP(json) {
+            console.log(json);
+            try { ip = json.ip; } catch (e) { ip = 'unknown'; }
+        }
+    </script>
+    <script type="application/javascript" src="https://jsonip.com?format=jsonp&callback=getIP"></script>
+
+    <!-- Mobile Menu Overlay -->
+    <div class="mobile-menu-overlay"></div>
+
+    <!-- Mobile Menu -->
+    <div class="mobile-menu">
+        <div class="mobile-menu-header">
+            <a href="index.html" class="logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+                </div>
+                ReceiptAI
+            </a>
+            <button class="mobile-menu-close" onclick="closeMobileMenu()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <nav class="mobile-menu-nav">
+            <a href="index.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                홈
+            </a>
+            <a href="receipts.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+                Receipts
+            </a>
+            <a href="analytics-receipts.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                Analytics
+            </a>
+            <a href="report.html" class="active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                리포트
+            </a>
+            <a href="budget.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><polyline points="2 10 22 10"/><circle cx="17" cy="15" r="1" fill="currentColor" stroke="none"/></svg>
+                예산 관리
+            </a>
+            <a href="settings.html">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                Settings
+            </a>
+        </nav>
+        <div class="mobile-menu-footer">
+            <a href="login.html" class="mobile-logout-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Logout
+            </a>
+            <div class="theme-toggle">
+                <button class="theme-btn theme-btn-snow active" onclick="setTheme('snow')" title="Snow Edition">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                </button>
+                <button class="theme-btn theme-btn-carbon" onclick="setTheme('carbon')" title="Carbon Edition">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Top Navigation -->
+        <nav class="top-nav">
+            <div class="nav-container">
+                <div class="nav-left">
+                    <a href="index.html" class="logo">
+                        <div class="logo-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+                        </div>
+                        ReceiptAI
+                    </a>
+                    <div class="nav-menu">
+                        <div class="nav-item"><a href="index.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>홈</a></div>
+                        <div class="nav-item"><a href="receipts.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>Receipts</a></div>
+                        <div class="nav-item"><a href="analytics-receipts.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Analytics</a></div>
+                        <div class="nav-item"><a href="report.html" class="nav-link active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>리포트</a></div>
+                        <div class="nav-item"><a href="budget.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><polyline points="2 10 22 10"/><circle cx="17" cy="15" r="1" fill="currentColor" stroke="none"/></svg>예산 관리</a></div>
+                        <div class="nav-item"><a href="settings.html" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a></div>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="theme-toggle">
+                        <button class="theme-btn theme-btn-snow active" onclick="setTheme('snow')" title="Snow Edition"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button>
+                        <button class="theme-btn theme-btn-carbon" onclick="setTheme('carbon')" title="Carbon Edition"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+                    </div>
+                    <button class="user-menu"><div class="user-avatar">A</div><span class="user-name">Alex</span></button>
+                    <a href="login.html" class="btn-logout" title="Logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
+                    <button class="mobile-menu-btn" onclick="toggleMobileMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+
+            <!-- Page Header -->
+            <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+                <div>
+                    <h1 class="greeting">월간 리포트</h1>
+                    <p class="greeting-sub" id="report-period-label">기간을 선택하세요</p>
+                </div>
+                <button class="btn btn-secondary print-btn" onclick="window.print()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                    리포트 인쇄
+                </button>
+            </div>
+
+            <!-- 기간 선택 -->
+            <div class="card section-gap" id="period-section">
+                <div class="period-row">
+                    <label>리포트 기간</label>
+                    <select id="month-select" onchange="onMonthChange()">
+                        <option>로딩 중...</option>
+                    </select>
+                    <button class="btn btn-ghost" onclick="loadData()" style="font-size:0.82rem;padding:0.4rem 0.85rem;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                        새로고침
+                    </button>
+                </div>
+            </div>
+
+            <!-- 에러 -->
+            <div id="error-banner" class="error-banner">데이터를 불러오는 데 실패했습니다. 로컬 데이터로 표시합니다.</div>
+
+            <!-- 로딩 -->
+            <div id="loading-wrap" class="loading-wrap">
+                <div class="spinner"></div>
+                <p>데이터를 불러오는 중...</p>
+            </div>
+
+            <!-- 리포트 본문 -->
+            <div id="report-wrap" style="display:none;">
+
+                <!-- 빈 상태 -->
+                <div id="report-empty" class="empty-state" style="display:none;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                        <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>
+                    </svg>
+                    <p>선택한 월에 등록된 회계 데이터가 없습니다</p>
+                </div>
+
+                <!-- 리포트 콘텐츠 -->
+                <div id="report-content" style="display:none;">
+
+                    <!-- ① 핵심 요약 카드 -->
+                    <div class="summary-grid" id="summary-grid"></div>
+
+                    <!-- ② 카테고리별 도넛 차트 + 표 -->
+                    <div class="charts-row">
+                        <div class="card">
+                            <div class="card-header">
+                                <div>
+                                    <h3 class="card-title">카테고리별 지출 비율</h3>
+                                    <p class="card-subtitle">금액 기준</p>
+                                </div>
+                            </div>
+                            <div class="donut-wrap" id="donut-wrap"></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header">
+                                <div>
+                                    <h3 class="card-title">카테고리별 상세</h3>
+                                    <p class="card-subtitle">건수 · 금액 · 비율</p>
+                                </div>
+                            </div>
+                            <table class="report-table">
+                                <thead>
+                                    <tr><th>카테고리</th><th>건수</th><th style="text-align:right;">금액</th><th style="text-align:right;">비율</th></tr>
+                                </thead>
+                                <tbody id="category-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- ③ 작성자별 현황 -->
+                    <div class="card section-gap">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">작성자별 등록 현황</h3>
+                                <p class="card-subtitle">작성자 기준 집계</p>
+                            </div>
+                        </div>
+                        <table class="report-table">
+                            <thead>
+                                <tr><th>작성자</th><th>건수</th><th style="text-align:right;">총액</th><th style="text-align:right;">평균</th></tr>
+                            </thead>
+                            <tbody id="author-table-body"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- ④ 자주 구매한 품목 TOP 5 -->
+                    <div class="card section-gap" id="top-items-section" style="display:none;">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">자주 구매한 품목 TOP 5</h3>
+                                <p class="card-subtitle">해당 월 영수증 품목 기준</p>
+                            </div>
+                        </div>
+                        <div id="top-items-list"></div>
+                    </div>
+
+                    <!-- ⑤ 지출 내역 상세 테이블 -->
+                    <div class="card section-gap">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">지출 내역 상세</h3>
+                                <p class="card-subtitle" id="detail-count"></p>
+                            </div>
+                        </div>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>날짜</th>
+                                        <th>상호명</th>
+                                        <th>카테고리</th>
+                                        <th>작성자</th>
+                                        <th style="text-align:right;">금액</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="detail-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </main>
+
+        <footer class="footer">
+            <p>&copy; 2026 ReceiptAI - OCR 기반 스마트 회계 관리</p>
+        </footer>
+    </div>
+
+    <script src="templatemo-daynight-script.js"></script>
+
+    <script>
+    /* ================================================================
+       Report – 월간 지출 리포트
+    ================================================================ */
+
+    if (typeof APPS_SCRIPT_URL === 'undefined') {
+        console.error('config.js가 없습니다. config.example.js를 참고하여 config.js를 생성해주세요.');
+    }
+
+    const CHART_COLORS = ['#6366F1','#10B981','#F59E0B','#A855F7','#6B7280','#EF4444','#14B8A6','#F97316'];
+
+    let allReceipts = [];
+    let selectedMonth = '';
+
+    function fmt(n) { return Number(n).toLocaleString('ko-KR') + '원'; }
+    function fmtShort(n) {
+        if (n >= 100000000) return (n / 100000000).toFixed(1) + '억';
+        if (n >= 10000) return Math.round(n / 10000) + '만';
+        return n.toLocaleString('ko-KR');
+    }
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    /* ── 데이터 로드 ── */
+    function loadData() {
+        const userUrl = localStorage.getItem('userAppsScriptUrl');
+        const sheetsUrl = (userUrl && userUrl.trim()) ? userUrl.trim() : APPS_SCRIPT_URL;
+
+        document.getElementById('loading-wrap').style.display = 'block';
+        document.getElementById('report-wrap').style.display = 'none';
+        document.getElementById('error-banner').style.display = 'none';
+
+        $.ajax({
+            url: sheetsUrl + '?action=read&table=receipts',
+            dataType: 'jsonp',
+            timeout: 15000,
+            success: function(response) {
+                const raw = (response && Array.isArray(response.data) ? response.data
+                            : Array.isArray(response) ? response : []).filter(r => r != null);
+                const local = (() => { try { return JSON.parse(localStorage.getItem('receipts')) || []; } catch(e) { return []; } })();
+                allReceipts = getMergedReceipts(raw, local);
+                initReport();
+            },
+            error: function() {
+                try {
+                    const stored = JSON.parse(localStorage.getItem('receipts')) || [];
+                    allReceipts = stored;
+                    document.getElementById('error-banner').style.display = 'block';
+                } catch(e) { allReceipts = []; }
+                initReport();
+            }
+        });
+    }
+
+    function initReport() {
+        document.getElementById('loading-wrap').style.display = 'none';
+        document.getElementById('report-wrap').style.display = 'block';
+        buildMonthOptions();
+        if (selectedMonth) renderReport();
+        else {
+            document.getElementById('report-empty').style.display = 'block';
+            document.getElementById('report-content').style.display = 'none';
+        }
+    }
+
+    /* ── 기간 드롭다운 ── */
+    function buildMonthOptions() {
+        const months = [...new Set(
+            allReceipts.map(r => (r.date || r.created_at || '').substring(0, 7)).filter(m => /^\d{4}-\d{2}$/.test(m))
+        )].sort().reverse();
+
+        const sel = document.getElementById('month-select');
+        if (!months.length) {
+            sel.innerHTML = '<option value="">데이터 없음</option>';
+            selectedMonth = '';
+            return;
+        }
+
+        const prevSelected = selectedMonth;
+        sel.innerHTML = months.map(m => {
+            const [y, mo] = m.split('-');
+            return `<option value="${m}"${m === prevSelected ? ' selected' : ''}>${y}년 ${parseInt(mo, 10)}월</option>`;
+        }).join('');
+
+        selectedMonth = prevSelected && months.includes(prevSelected) ? prevSelected : months[0];
+        sel.value = selectedMonth;
+    }
+
+    function onMonthChange() {
+        selectedMonth = document.getElementById('month-select').value;
+        renderReport();
+    }
+
+    /* ── 리포트 렌더링 ── */
+    function renderReport() {
+        const list = allReceipts.filter(r => (r.date || '').startsWith(selectedMonth));
+        const [y, m] = selectedMonth.split('-').map(Number);
+        const prevDate = new Date(y, m - 2, 1);
+        const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+        const prevList = allReceipts.filter(r => (r.date || '').startsWith(prevMonth));
+
+        document.getElementById('report-period-label').textContent = `${y}년 ${m}월 리포트`;
+
+        if (!list.length) {
+            document.getElementById('report-empty').style.display = 'block';
+            document.getElementById('report-content').style.display = 'none';
+            return;
+        }
+        document.getElementById('report-empty').style.display = 'none';
+        document.getElementById('report-content').style.display = 'block';
+
+        renderSummaryCards(list, prevList, y, m);
+        renderDonut(list);
+        renderCategoryTable(list);
+        renderAuthorTable(list);
+        renderTopItems(list);
+        renderDetailTable(list);
+    }
+
+    /* ── ① 요약 카드 ── */
+    function renderSummaryCards(list, prevList, y, m) {
+        const total = list.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+        const prevTotal = prevList.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+        const days = new Date(y, m, 0).getDate();
+        const dailyAvg = Math.round(total / days);
+
+        let changeHtml;
+        if (prevTotal > 0) {
+            const pct = ((total - prevTotal) / prevTotal * 100);
+            const up = pct >= 0;
+            changeHtml = `
+                <div class="s-value" style="color:${up ? 'var(--warning,#F59E0B)' : 'var(--success,#10B981)'};">
+                    ${up ? '▲' : '▼'} ${Math.abs(pct).toFixed(1)}%
+                </div>
+                <div class="s-sub">${fmt(Math.abs(total - prevTotal))} ${up ? '증가' : '감소'} (전월 ${fmt(prevTotal)})</div>`;
+        } else {
+            changeHtml = `<div class="s-value" style="font-size:0.9rem;color:var(--text-secondary);">전월 데이터 없음</div>`;
+        }
+
+        document.getElementById('summary-grid').innerHTML = `
+            <div class="summary-card">
+                <div class="s-label">이번 달 총 지출</div>
+                <div class="s-value accent">${fmt(total)}</div>
+            </div>
+            <div class="summary-card">
+                <div class="s-label">전월 대비</div>
+                ${changeHtml}
+            </div>
+            <div class="summary-card">
+                <div class="s-label">총 건수</div>
+                <div class="s-value">${list.length}건</div>
+            </div>
+            <div class="summary-card">
+                <div class="s-label">일평균 지출</div>
+                <div class="s-value accent">${fmt(dailyAvg)}</div>
+                <div class="s-sub">기준 ${days}일</div>
+            </div>`;
+    }
+
+    /* ── ② 도넛 차트 ── */
+    function renderDonut(list) {
+        const catTotals = {};
+        let grandTotal = 0;
+        list.forEach(r => {
+            const c = r.category || '기타';
+            catTotals[c] = (catTotals[c] || 0) + (Number(r.amount) || 0);
+            grandTotal += Number(r.amount) || 0;
+        });
+        if (!grandTotal) { document.getElementById('donut-wrap').innerHTML = ''; return; }
+
+        const segments = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
+        const R = 70, CX = 100, CY = 100, CIRC = 2 * Math.PI * R;
+        let svgCircles = '', cumulativeDash = 0;
+
+        segments.forEach(([, sum], i) => {
+            const dash = (sum / grandTotal) * CIRC;
+            const color = CHART_COLORS[i % CHART_COLORS.length];
+            svgCircles += `<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${color}" stroke-width="28"
+                stroke-dasharray="${dash.toFixed(2)} ${(CIRC - dash).toFixed(2)}"
+                stroke-dashoffset="${(CIRC - cumulativeDash).toFixed(2)}"
+                transform="rotate(-90 ${CX} ${CY})"/>`;
+            cumulativeDash += dash;
+        });
+
+        const legendHtml = segments.map(([cat, sum], i) => {
+            const pct = ((sum / grandTotal) * 100).toFixed(1);
+            const color = CHART_COLORS[i % CHART_COLORS.length];
+            return `<div class="legend-item">
+                <div class="legend-dot" style="background:${color};"></div>
+                <span class="legend-name" title="${escHtml(cat)}">${escHtml(cat)}</span>
+                <span class="legend-amt">${fmt(sum)}</span>
+                <span class="legend-pct">${pct}%</span>
+            </div>`;
+        }).join('');
+
+        document.getElementById('donut-wrap').innerHTML = `
+            <div class="donut-svg-wrap">
+                <svg viewBox="0 0 200 200" width="160" height="160">
+                    <circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="var(--border)" stroke-width="28"/>
+                    ${svgCircles}
+                    <text x="${CX}" y="${CY - 9}" text-anchor="middle" font-size="11" font-family="inherit" style="fill:var(--text-secondary);">전체</text>
+                    <text x="${CX}" y="${CY + 11}" text-anchor="middle" font-size="14" font-weight="700" font-family="inherit" style="fill:var(--text-primary);">${fmtShort(grandTotal)}</text>
+                    <text x="${CX}" y="${CY + 27}" text-anchor="middle" font-size="10" font-family="inherit" style="fill:var(--text-secondary);">원</text>
+                </svg>
+            </div>
+            <div class="donut-legend">${legendHtml}</div>`;
+    }
+
+    /* ── ② 카테고리 표 ── */
+    function renderCategoryTable(list) {
+        const cats = {};
+        const grandTotal = list.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+        list.forEach(r => {
+            const c = r.category || '기타';
+            if (!cats[c]) cats[c] = { count: 0, total: 0 };
+            cats[c].count++;
+            cats[c].total += Number(r.amount) || 0;
+        });
+
+        document.getElementById('category-table-body').innerHTML = Object.entries(cats)
+            .sort((a, b) => b[1].total - a[1].total)
+            .map(([cat, d], i) => {
+                const color = CHART_COLORS[i % CHART_COLORS.length];
+                const pct = grandTotal > 0 ? ((d.total / grandTotal) * 100).toFixed(1) : '0.0';
+                return `<tr>
+                    <td><span class="cat-badge" style="background:${color}22;color:${color};">${escHtml(cat)}</span></td>
+                    <td>${d.count}건</td>
+                    <td style="text-align:right;font-weight:600;">${fmt(d.total)}</td>
+                    <td style="text-align:right;">${pct}%</td>
+                </tr>`;
+            }).join('');
+    }
+
+    /* ── ③ 작성자 표 ── */
+    function renderAuthorTable(list) {
+        const authors = {};
+        list.forEach(r => {
+            const a = (r.author || '').trim() || '미입력';
+            if (!authors[a]) authors[a] = { count: 0, total: 0 };
+            authors[a].count++;
+            authors[a].total += Number(r.amount) || 0;
+        });
+
+        document.getElementById('author-table-body').innerHTML = Object.entries(authors)
+            .sort((a, b) => b[1].total - a[1].total)
+            .map(([name, d]) => {
+                const avg = Math.round(d.total / d.count);
+                return `<tr>
+                    <td style="font-weight:500;">${escHtml(name)}</td>
+                    <td>${d.count}건</td>
+                    <td style="text-align:right;font-weight:600;">${fmt(d.total)}</td>
+                    <td style="text-align:right;">${fmt(avg)}</td>
+                </tr>`;
+            }).join('');
+    }
+
+    /* ── ④ 품목 TOP 5 ── */
+    function renderTopItems(list) {
+        const counts = {};
+        list.forEach(r => {
+            if (!r.items) return;
+            const items = typeof r.items === 'string' ? JSON.parse(r.items) : r.items;
+            (Array.isArray(items) ? items : []).forEach(it => {
+                const n = (it.name || '').trim();
+                if (!n) return;
+                if (!counts[n]) counts[n] = { count: 0, total: 0 };
+                counts[n].count++;
+                counts[n].total += Number(it.price) || 0;
+            });
+        });
+
+        const top5 = Object.entries(counts).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
+        const sec = document.getElementById('top-items-section');
+        if (!top5.length) { sec.style.display = 'none'; return; }
+        sec.style.display = 'block';
+
+        document.getElementById('top-items-list').innerHTML = top5.map(([name, d], i) => `
+            <div class="top-item-row">
+                <div class="top-item-rank">${i + 1}</div>
+                <div style="flex:1;font-size:0.875rem;font-weight:500;color:var(--text-primary);">${escHtml(name)}</div>
+                <div style="font-size:0.8rem;color:var(--text-secondary);margin-right:0.75rem;">${d.count}회</div>
+                <div style="font-size:0.875rem;font-weight:600;color:var(--text-primary);">${fmt(d.total)}</div>
+            </div>`).join('');
+    }
+
+    /* ── ⑤ 상세 테이블 ── */
+    function renderDetailTable(list) {
+        const sorted = [...list].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        document.getElementById('detail-count').textContent = `총 ${sorted.length}건`;
+        document.getElementById('detail-tbody').innerHTML = sorted.map(r => {
+            const name = r.storeName || r.store_name || '';
+            return `<tr>
+                <td>${r.date || ''}</td>
+                <td style="font-weight:500;">${escHtml(name)}</td>
+                <td>${escHtml(r.category || '')}</td>
+                <td style="font-size:0.82rem;color:var(--text-secondary);">${escHtml((r.author || '').trim() || '미입력')}</td>
+                <td style="text-align:right;font-weight:600;">${fmt(r.amount || 0)}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+
+    <!-- ===== MVT Script Block 4: visitors 테이블 insert ===== -->
+    <script>
+    var data = JSON.stringify(
+        {"id": getUVfromCookie(),
+            "landingUrl":window.location.href,
+            "ip":ip,
+            "referer":document.referrer,
+            "time_stamp":getTimeStamp(),
+            "utm":utm,
+            "device":mobile}
+        );
+
+    var addrScript = APPS_SCRIPT_URL;
+
+    $(document).ready(function () {
+        console.log("Document Ready");
+        axios.get(addrScript + '?action=insert&table=visitors&data=' + data)
+        .then(response => {
+            console.log(JSON.stringify(response));
+        })
+        .catch(error => {
+            if (error.response) {
+                console.log(error.response.data);
+                console.log(error.response.status);
+                console.log(error.response.headers);
+            } else if (error.request) {
+                console.log(error.request);
+            } else {
+                console.log('Error', error.message);
+            }
+            console.log(error.config);
+        });
+    });
+    </script>
+</body>
+</html>
